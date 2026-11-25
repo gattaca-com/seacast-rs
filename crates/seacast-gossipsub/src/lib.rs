@@ -28,6 +28,7 @@ pub use control::{
 };
 pub use frame::{Inbound, RpcOut, write_entry};
 pub use payload::{
-    CHUNK_FIXED, Chunk, MAX_CHUNK_BYTES, MESSAGE_ID_BYTES, MessageId, PAYLOAD, PayloadCodec,
-    build_chunk, chunk_id_of, message_id_of, payload_group, split_chunk, split_parts,
+    CHUNK_FIXED, CONTEXT_BYTES, Chunk, MAX_CHUNK_BYTES, MESSAGE_ID_BYTES, MessageId, PAYLOAD,
+    PayloadCodec, build_chunk, chunk_id_of, group_key, message_id_of, payload_group, split_chunk,
+    split_parts,
 };

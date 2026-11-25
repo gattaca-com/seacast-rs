@@ -4,6 +4,8 @@
 //! delivered. The `RPC` between them is a plain struct in place of gossipsub's
 //! protobuf, and carries entries that are not SEACAST's beside those that are.
 
+use std::collections::HashMap;
+
 use seacast_codec::{
     SegmentDescriptor, SnappyBlockCompressor, UNIT, VecBufferPool, build_group, group_id, snappy,
 };
@@ -13,13 +15,15 @@ use seacast_core::{
     SplitMix64, TimerEvent, Timestamp, TypeCodec, ValidationResult,
 };
 use seacast_gossipsub::{
-    Inbound, MESSAGE_ID_BYTES, PAYLOAD, PayloadCatalog, PayloadCodec, PayloadHost, RpcOut,
-    chunk_id_of, is_seacast, message_id_of, payload_group, payload_join, read_holding, read_offer,
-    read_want, write_entry,
+    CONTEXT_BYTES, Inbound, MESSAGE_ID_BYTES, PAYLOAD, PayloadCatalog, PayloadCodec, PayloadHost,
+    RpcOut, chunk_id_of, group_key, is_seacast, message_id_of, payload_group, payload_join,
+    read_holding, read_offer, read_want, write_entry,
 };
 
 const TOPIC: &[u8] = b"/eth2/00000000/seacast_payload/ssz_snappy";
 const FORK: [u8; 4] = [0; 4];
+const SLOT: u64 = 7;
+const ROOT: Bytes32 = [0xb1; 32];
 /// A node's first peer, and the second of a node between two.
 const PEER: PeerId = 1;
 const NEXT: PeerId = 2;
@@ -27,28 +31,42 @@ const NEXT: PeerId = 2;
 type Chunk = ChunkMsg<Vec<u8>>;
 type Catalog = PayloadCatalog<Blocks, PayloadCodec<VecBufferPool, Vec<u8>>>;
 
-/// The domain: the block installed, as the group its bid commits and that
-/// group's id, and the groups whose chunks wait for it.
+fn context() -> [u8; CONTEXT_BYTES] {
+    let mut context = [0; CONTEXT_BYTES];
+    context[..8].copy_from_slice(&SLOT.to_le_bytes());
+    context[8..].copy_from_slice(&ROOT);
+    context
+}
+
+/// The domain: the blocks installed, each with its slot and the group id its
+/// bid commits, and the groups whose chunks wait for a block.
 #[derive(Default)]
 struct Blocks {
-    installed: Option<(GroupId, Bytes32)>,
-    waiting: Vec<GroupId>,
+    installed: HashMap<Bytes32, (u64, Bytes32)>,
+    waiting: Vec<(Bytes32, GroupId)>,
 }
 
 impl PayloadHost for Blocks {
-    fn authenticate(&mut self, group: &GroupId, header_id: &Bytes32) -> ValidationResult {
-        match self.installed {
+    fn authenticate(
+        &mut self,
+        group: &GroupId,
+        header_id: &Bytes32,
+        context: &[u8],
+    ) -> ValidationResult {
+        let slot = u64::from_le_bytes(context[..8].try_into().unwrap());
+        let root: Bytes32 = context[8..].try_into().unwrap();
+        match self.installed.get(&root) {
             None => {
-                self.waiting.push(*group);
+                self.waiting.push((root, *group));
                 ValidationResult::Defer
             }
-            Some((_, bid)) if bid == *header_id => ValidationResult::Accept,
+            Some(&(of, bid)) if of == slot && bid == *header_id => ValidationResult::Accept,
             Some(_) => ValidationResult::Reject,
         }
     }
 
     fn authenticable(&self, group: &GroupId) -> bool {
-        self.installed.is_some_and(|(of, _)| of == *group)
+        self.installed.values().any(|&(slot, bid)| payload_group(group_key(&bid, slot)) == *group)
     }
 
     fn node_id(&self, peer: PeerId) -> NodeId {
@@ -292,9 +310,14 @@ impl Host {
     /// The block is installed: the domain can tell of the groups that waited.
     fn install(&mut self, descriptor: &SegmentDescriptor) {
         let blocks = &mut self.catalog.host;
-        blocks.installed = Some((payload_group(descriptor.root), group_id(descriptor)));
-        let mut groups = std::mem::take(&mut blocks.waiting);
-        groups.dedup();
+        blocks.installed.insert(ROOT, (SLOT, group_id(descriptor)));
+        let mut groups: Vec<GroupId> = Vec::new();
+        blocks.waiting.retain(|&(root, group)| {
+            if root == ROOT && !groups.contains(&group) {
+                groups.push(group);
+            }
+            root != ROOT
+        });
         self.node.on_groups_authenticated(
             &groups,
             &mut self.env,
@@ -311,7 +334,7 @@ impl Host {
         let (descriptor, shards) =
             build_group::<Vec<u8>, _, _>(body, &mut VecBufferPool, &SnappyBlockCompressor);
         self.install(&descriptor);
-        let chunks = self.catalog.codec.build_chunks(&descriptor, &shards);
+        let chunks = self.catalog.codec.build_chunks(&context(), &descriptor, &shards);
         let shape = Shape { n: descriptor.n(), k: descriptor.k() };
         self.node.publish(
             chunks[0].group,

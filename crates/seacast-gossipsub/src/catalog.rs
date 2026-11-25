@@ -13,19 +13,36 @@ use seacast_core::{
 
 use crate::payload::PAYLOAD;
 
-/// What the payload asks of the domain. A chunk names its group alone, so
-/// the domain is given no context.
+/// What the payload asks of the domain. A `context` is `slot |
+/// beacon_block_root` ([`CONTEXT_BYTES`](crate::CONTEXT_BYTES)).
 pub trait PayloadHost {
-    /// Whether the descriptor whose group id is `header_id` is committed
-    /// (`Domain::authenticate`): `Defer` while the host cannot tell.
-    fn authenticate(&mut self, group: &GroupId, header_id: &Bytes32) -> ValidationResult;
+    /// Whether the block `context` names commits the descriptor whose group id
+    /// is `header_id` (`Domain::authenticate`): `Defer` until that block is
+    /// validated and applied locally, then whether its slot is the context's
+    /// and its bid's group id is `header_id`.
+    fn authenticate(
+        &mut self,
+        group: &GroupId,
+        header_id: &Bytes32,
+        context: &[u8],
+    ) -> ValidationResult;
 
-    /// Whether `group` is one the host has accepted (`Domain::authenticable`).
+    /// Whether an installed block commits `group` (`Domain::authenticable`).
     fn authenticable(&self, group: &GroupId) -> bool;
 
-    /// When `group` leaves the live window (`Domain::deadline`).
-    fn deadline(&self, _group: &GroupId) -> Option<Timestamp> {
+    /// When `context`'s slot leaves the live window (`Domain::deadline`).
+    fn deadline(&self, _group: &GroupId, _context: &[u8]) -> Option<Timestamp> {
         None
+    }
+
+    /// Whether a chunk of `group` may name the block of `context`. Asked of
+    /// every chunk, where `authenticate` is asked once a group and a group's
+    /// chunks may name two blocks of its slot (`seacast-lite.md` §1). `false`
+    /// rejects the chunk and penalises its sender: only for a block that is
+    /// installed and whose bid does not commit the group. A block not
+    /// installed is no ground to refuse.
+    fn names_block(&self, _group: &GroupId, _context: &[u8]) -> bool {
+        true
     }
 
     fn node_id(&self, peer: PeerId) -> NodeId;
@@ -77,7 +94,7 @@ where
     }
 
     fn check(&self, chunk: &ChunkMsg<B>) -> bool {
-        self.codec.check(chunk)
+        self.codec.check(chunk) && self.host.names_block(&chunk.group, self.codec.context(chunk))
     }
 
     fn check_proof(&mut self, chunk: &ChunkMsg<B>) -> ValidationResult {
@@ -112,17 +129,17 @@ impl<Host: PayloadHost, C> Domain for PayloadCatalog<Host, C> {
         &mut self,
         group: &GroupId,
         header_id: &Bytes32,
-        _context: &[u8],
+        context: &[u8],
     ) -> ValidationResult {
-        self.host.authenticate(group, header_id)
+        self.host.authenticate(group, header_id, context)
     }
 
     fn authenticable(&self, group: &GroupId) -> bool {
         self.host.authenticable(group)
     }
 
-    fn deadline(&self, group: &GroupId, _context: &[u8]) -> Option<Timestamp> {
-        self.host.deadline(group)
+    fn deadline(&self, group: &GroupId, context: &[u8]) -> Option<Timestamp> {
+        self.host.deadline(group, context)
     }
 }
 
