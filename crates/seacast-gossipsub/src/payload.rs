@@ -15,6 +15,10 @@
 //! ```
 //!
 //! The context the domain reads is `slot | beacon_block_root`.
+//!
+//! [`Layout::Attached`] is a frame for a body that is no payload: the same
+//! without the context, and the group key the descriptor's alone. What its
+//! domain reads travels beside the frame, not in it ([`attach`]).
 
 use std::marker::PhantomData;
 
@@ -32,11 +36,138 @@ pub const PAYLOAD: TypeId = TypeId(0);
 
 /// A chunk's context: `slot | beacon_block_root`.
 pub const CONTEXT_BYTES: usize = 8 + 32;
-const GROUP_AT: usize = CONTEXT_BYTES;
-const DESCRIPTOR_AT: usize = GROUP_AT + 32;
-const INDEX_AT: usize = DESCRIPTOR_AT + DESCRIPTOR_BYTES;
+/// The fixed part of a frame after its context: the group key, the
+/// descriptor, the index and the two offsets.
+const FIXED_AFTER_CONTEXT: usize = 32 + DESCRIPTOR_BYTES + 4 + 4 + 4;
 /// The fixed part of `Chunk`: its fields up to the two offsets.
-pub const CHUNK_FIXED: usize = INDEX_AT + 4 + 4 + 4;
+pub const CHUNK_FIXED: usize = CONTEXT_BYTES + FIXED_AFTER_CONTEXT;
+
+/// A frame's layout, one a topic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layout {
+    /// `seacast-lite.md` §2's `Chunk`. The group key binds the slot.
+    Payload,
+    /// `Chunk` without `slot` and `beacon_block_root`. The group key is
+    /// `sha256(0x03 || group_id)`, so a body is one group whenever it is sent.
+    /// On the wire an attachment precedes the frame ([`attach`]): bytes that
+    /// travel with a chunk on a link and are not the chunk's, so its id and
+    /// the frame a node keeps and rebuilds are the same with or without them.
+    Attached,
+}
+
+impl Layout {
+    pub const fn context_len(self) -> usize {
+        match self {
+            Self::Payload => CONTEXT_BYTES,
+            Self::Attached => 0,
+        }
+    }
+
+    /// The fixed part of a frame: its fields up to the two offsets.
+    pub const fn fixed(self) -> usize {
+        self.context_len() + FIXED_AFTER_CONTEXT
+    }
+
+    /// The bound on a frame.
+    pub const fn max_frame(self) -> usize {
+        self.fixed() + 32 * MAX_PROOF_DEPTH + MAX_SEGMENT_SIZE as usize
+    }
+
+    /// The key of the group of a descriptor with id `gid`, `context` the
+    /// frame's.
+    pub fn group_key(self, gid: &Bytes32, context: &[u8]) -> Bytes32 {
+        let mut h = Sha256::new();
+        h.update(&[0x03]);
+        h.update(gid);
+        if let Self::Payload = self {
+            h.update(&context[..8]);
+        }
+        h.finalize()
+    }
+
+    /// Splits the frame `head || tail`, which a host may keep cut at its data
+    /// ([`ChunkBytes::tail`]). `None` where it is not one: too short, an
+    /// offset out of place, a proof that is not whole digests or over its
+    /// limit, data over its limit, or a cut elsewhere than at its data.
+    pub fn split<'a>(self, head: &'a [u8], tail: &'a [u8]) -> Option<Chunk<'a>> {
+        let (context, fixed_at) = (self.context_len(), self.fixed());
+        let (fixed, rest) = head.split_at_checked(fixed_at)?;
+        let (group_at, descriptor_at) = (context, context + 32);
+        let index_at = descriptor_at + DESCRIPTOR_BYTES;
+        let u32_at = |at: usize| u32::from_le_bytes(fixed[at..at + 4].try_into().unwrap());
+        let (proof_at, data_at) = (u32_at(index_at + 4) as usize, u32_at(index_at + 8) as usize);
+        if proof_at != fixed_at {
+            return None;
+        }
+        let (proof, data) = rest.split_at_checked(data_at.checked_sub(fixed_at)?)?;
+        let data = match (data, tail) {
+            (data, []) => data,
+            ([], tail) => tail,
+            _ => return None,
+        };
+        let (proof, []) = proof.as_chunks::<32>() else {
+            return None;
+        };
+        if proof.len() > MAX_PROOF_DEPTH || data.len() > MAX_SEGMENT_SIZE as usize {
+            return None;
+        }
+        let slot = fixed.first_chunk::<8>().filter(|_| context != 0);
+        Some(Chunk {
+            slot: slot.map_or(0, |slot| u64::from_le_bytes(*slot)),
+            beacon_block_root: &fixed[context.min(8)..context],
+            group: fixed[group_at..descriptor_at].try_into().unwrap(),
+            descriptor: SegmentDescriptor::deserialize(&fixed[descriptor_at..index_at])?,
+            index: u32_at(index_at),
+            proof,
+            data,
+        })
+    }
+
+    /// A frame. `context` is the layout's: `slot | beacon_block_root`, or
+    /// nothing.
+    pub fn build(
+        self,
+        context: &[u8],
+        group: &Bytes32,
+        descriptor: &SegmentDescriptor,
+        index: u32,
+        proof: &[Bytes32],
+        data: &[u8],
+    ) -> Vec<u8> {
+        debug_assert_eq!(context.len(), self.context_len());
+        let data_at = self.fixed() + 32 * proof.len();
+        let mut frame = Vec::with_capacity(data_at + data.len());
+        frame.extend_from_slice(context);
+        frame.extend_from_slice(group);
+        frame.extend_from_slice(&descriptor.serialize());
+        frame.extend_from_slice(&index.to_le_bytes());
+        frame.extend_from_slice(&(self.fixed() as u32).to_le_bytes());
+        frame.extend_from_slice(&(data_at as u32).to_le_bytes());
+        for digest in proof {
+            frame.extend_from_slice(digest);
+        }
+        frame.extend_from_slice(data);
+        frame
+    }
+}
+
+/// The bound on an attachment.
+pub const MAX_ATTACHMENT: usize = u16::MAX as usize;
+
+/// The start of a [`Layout::Attached`] message: `uint16 length | attachment`,
+/// the frame after it. `attachment` may be empty, and is at most
+/// [`MAX_ATTACHMENT`] bytes.
+pub fn attach(attachment: &[u8], out: &mut Vec<u8>) {
+    debug_assert!(attachment.len() <= MAX_ATTACHMENT);
+    out.extend_from_slice(&(attachment.len() as u16).to_le_bytes());
+    out.extend_from_slice(attachment);
+}
+
+/// A [`Layout::Attached`] message as its attachment and its frame.
+pub fn split_attached(message: &[u8]) -> Option<(&[u8], &[u8])> {
+    let (len, rest) = message.split_first_chunk::<2>()?;
+    rest.split_at_checked(u16::from_le_bytes(*len) as usize)
+}
 /// The bound on a chunk's SSZ (`seacast-bindings.md` §1.4, design A).
 pub const MAX_CHUNK_BYTES: usize = CHUNK_FIXED + 32 * MAX_PROOF_DEPTH + MAX_SEGMENT_SIZE as usize;
 
@@ -116,33 +247,7 @@ pub fn split_chunk(frame: &[u8]) -> Option<Chunk<'_>> {
 /// [`split_chunk`] of the frame `head || tail`, which a host may keep cut at
 /// its data ([`ChunkBytes::tail`]). `None` also where it is cut elsewhere.
 pub fn split_parts<'a>(head: &'a [u8], tail: &'a [u8]) -> Option<Chunk<'a>> {
-    let (fixed, rest) = head.split_at_checked(CHUNK_FIXED)?;
-    let u32_at = |at: usize| u32::from_le_bytes(fixed[at..at + 4].try_into().unwrap());
-    let (proof_at, data_at) = (u32_at(INDEX_AT + 4) as usize, u32_at(INDEX_AT + 8) as usize);
-    if proof_at != CHUNK_FIXED {
-        return None;
-    }
-    let (proof, data) = rest.split_at_checked(data_at.checked_sub(CHUNK_FIXED)?)?;
-    let data = match (data, tail) {
-        (data, []) => data,
-        ([], tail) => tail,
-        _ => return None,
-    };
-    let (proof, []) = proof.as_chunks::<32>() else {
-        return None;
-    };
-    if proof.len() > MAX_PROOF_DEPTH || data.len() > MAX_SEGMENT_SIZE as usize {
-        return None;
-    }
-    Some(Chunk {
-        slot: u64::from_le_bytes(fixed[..8].try_into().unwrap()),
-        beacon_block_root: &fixed[8..CONTEXT_BYTES],
-        group: fixed[GROUP_AT..DESCRIPTOR_AT].try_into().unwrap(),
-        descriptor: SegmentDescriptor::deserialize(&fixed[DESCRIPTOR_AT..INDEX_AT])?,
-        index: u32_at(INDEX_AT),
-        proof,
-        data,
-    })
+    Layout::Payload.split(head, tail)
 }
 
 /// The SSZ of a `Chunk`. `context` is `slot | beacon_block_root`.
@@ -154,19 +259,7 @@ pub fn build_chunk(
     proof: &[Bytes32],
     data: &[u8],
 ) -> Vec<u8> {
-    let data_at = CHUNK_FIXED + 32 * proof.len();
-    let mut frame = Vec::with_capacity(data_at + data.len());
-    frame.extend_from_slice(context);
-    frame.extend_from_slice(group);
-    frame.extend_from_slice(&descriptor.serialize());
-    frame.extend_from_slice(&index.to_le_bytes());
-    frame.extend_from_slice(&(CHUNK_FIXED as u32).to_le_bytes());
-    frame.extend_from_slice(&(data_at as u32).to_le_bytes());
-    for digest in proof {
-        frame.extend_from_slice(digest);
-    }
-    frame.extend_from_slice(data);
-    frame
+    Layout::Payload.build(context, group, descriptor, index, proof, data)
 }
 
 /// The payload's [`TypeCodec`] on one topic. It reads a frame kept in two
@@ -182,6 +275,7 @@ pub struct PayloadCodec<Pool, B> {
     pub pool: Pool,
     /// The type of the topic's groups.
     object_type: TypeId,
+    layout: Layout,
     /// The content id's hash over what precedes the chunk: the domain, the
     /// topic's length, the topic.
     id_prefix: Sha256,
@@ -201,11 +295,16 @@ where
     /// The codec of `topic` where its groups are of `object_type`: a host
     /// with several chunk topics gives each a type of its own.
     pub fn of(object_type: TypeId, pool: Pool, topic: &[u8]) -> Self {
+        Self::with_layout(object_type, Layout::Payload, pool, topic)
+    }
+
+    /// [`of`](Self::of) for a topic whose frames are `layout`'s.
+    pub fn with_layout(object_type: TypeId, layout: Layout, pool: Pool, topic: &[u8]) -> Self {
         let mut id_prefix = Sha256::new();
         id_prefix.update(&MESSAGE_DOMAIN_VALID_SNAPPY);
         id_prefix.update(&(topic.len() as u64).to_le_bytes());
         id_prefix.update(topic);
-        Self { pool, object_type, id_prefix, _buffer: PhantomData }
+        Self { pool, object_type, layout, id_prefix, _buffer: PhantomData }
     }
 
     /// The Altair message id of `frame` on the topic: the first 20 bytes of
@@ -228,32 +327,45 @@ where
         data: &[u8],
         decompress: impl FnOnce(&[u8], usize) -> Option<B>,
     ) -> Option<ChunkMsg<B>> {
-        let len = snappy::decompressed_len(data).filter(|&len| len <= MAX_CHUNK_BYTES)?;
+        let bound = self.layout.max_frame();
+        let len = snappy::decompressed_len(data).filter(|&len| len <= bound)?;
         let frame = decompress(data, len).filter(|frame| frame.len() == len)?;
-        let f = split(&frame)?;
+        self.read_frame(frame, data.len() as u32)
+    }
+
+    /// A frame as a chunk, as [`read_message`](Self::read_message) makes it.
+    /// A host of [`Layout::Attached`] takes the attachment off the message
+    /// first ([`split_attached`]). `wire_len`: the message's length.
+    pub fn read_frame(&self, frame: B, wire_len: u32) -> Option<ChunkMsg<B>> {
+        let f = self.split(&frame)?;
         let group = topic_group(self.object_type, f.group);
         let (index, memo) = (f.index, leaf_hash(f.data));
         let cached_id = self.chunk_id(&group, index, frame.as_bytes(), frame.tail());
-        Some(ChunkMsg { group, index, cached_id, frame, memo, wire_len: data.len() as u32 })
+        Some(ChunkMsg { group, index, cached_id, frame, memo, wire_len })
+    }
+
+    fn split<'a>(&self, frame: &'a B) -> Option<Chunk<'a>> {
+        self.layout.split(frame.as_bytes(), frame.tail())
     }
 
     /// The chunks of a group built by `seacast_codec::build_group`, as a
-    /// publisher hands them to the node. `context` is `slot |
-    /// beacon_block_root`.
+    /// publisher hands them to the node. `context` is the layout's: `slot |
+    /// beacon_block_root`, or nothing.
     pub fn build_chunks(
         &mut self,
-        context: &[u8; CONTEXT_BYTES],
+        context: &[u8],
         descriptor: &SegmentDescriptor,
         shards: &[Shard<B>],
     ) -> Vec<ChunkMsg<B>> {
-        let slot = u64::from_le_bytes(context[..8].try_into().unwrap());
-        let key = group_key(&group_id(descriptor), slot);
+        let layout = self.layout;
+        let key = layout.group_key(&group_id(descriptor), context);
         let group = topic_group(self.object_type, key);
         shards
             .iter()
             .map(|shard| {
                 let data = shard.data.as_bytes();
-                let frame = build_chunk(context, &key, descriptor, shard.index, &shard.proof, data);
+                let frame =
+                    layout.build(context, &key, descriptor, shard.index, &shard.proof, data);
                 ChunkMsg {
                     group,
                     index: shard.index,
@@ -270,7 +382,7 @@ where
     /// `Pending` for: its Merkle proof, from the leaf digest in `memo`. The
     /// host runs it wherever it sees fit before it calls `on_validated`.
     pub fn check_proof(&self, chunk: &ChunkMsg<B>) -> ValidationResult {
-        let ok = split(&chunk.frame).is_some_and(|f| {
+        let ok = self.split(&chunk.frame).is_some_and(|f| {
             let d = &f.descriptor;
             verify_leaf_path(&d.root, &chunk.memo, f.index, d.count, f.proof)
         });
@@ -282,11 +394,6 @@ where
     pub fn chunk_id(&self, group: &GroupId, index: u32, head: &[u8], tail: &[u8]) -> ChunkId {
         chunk_id(&self.id_prefix, group, index, head, tail)
     }
-}
-
-/// A frame split, whole or kept in two parts.
-fn split<B: ChunkBytes>(frame: &B) -> Option<Chunk<'_>> {
-    split_parts(frame.as_bytes(), frame.tail())
 }
 
 fn content_id(id_prefix: &Sha256, head: &[u8], tail: &[u8]) -> [u8; 20] {
@@ -311,7 +418,7 @@ where
     B: ChunkBytes,
 {
     fn shape(&self, chunk: &ChunkMsg<B>) -> Option<Shape> {
-        let d = split(&chunk.frame)?.descriptor;
+        let d = self.split(&chunk.frame)?.descriptor;
         Some(Shape { n: d.count, k: d.k() })
     }
 
@@ -320,10 +427,11 @@ where
     /// is the descriptor's at the slot, and the proof and the data have the
     /// lengths the descriptor gives.
     fn check(&self, chunk: &ChunkMsg<B>) -> bool {
-        let Some(f) = split(&chunk.frame) else {
+        let Some(f) = self.split(&chunk.frame) else {
             return false;
         };
         let d = &f.descriptor;
+        let context = &chunk.frame.as_bytes()[..self.layout.context_len()];
         chunk.group == topic_group(self.object_type, f.group) &&
             chunk.index == f.index &&
             d.is_valid() &&
@@ -331,7 +439,7 @@ where
             f.index < d.count &&
             f.proof.len() == d.proof_len() &&
             f.data.len() == d.segment_length(f.index) &&
-            group_key(&group_id(d), f.slot) == f.group
+            self.layout.group_key(&group_id(d), context) == f.group
     }
 
     fn check_proof(&mut self, _chunk: &ChunkMsg<B>) -> ValidationResult {
@@ -339,11 +447,11 @@ where
     }
 
     fn header_id(&self, chunk: &ChunkMsg<B>) -> Bytes32 {
-        split(&chunk.frame).map(|f| group_id(&f.descriptor)).unwrap_or_default()
+        self.split(&chunk.frame).map(|f| group_id(&f.descriptor)).unwrap_or_default()
     }
 
     fn context<'a>(&self, chunk: &'a ChunkMsg<B>) -> &'a [u8] {
-        chunk.frame.as_bytes().get(..CONTEXT_BYTES).unwrap_or(&[])
+        chunk.frame.as_bytes().get(..self.layout.context_len()).unwrap_or(&[])
     }
 
     fn decode(
@@ -354,12 +462,12 @@ where
         out_rebuilt: &mut PreallocVec<ChunkMsg<B>>,
     ) -> Option<B> {
         let first = &available.first()?.frame;
-        let f = split(first)?;
-        let (descriptor, key) = (f.descriptor, f.group);
-        let context: &[u8; CONTEXT_BYTES] = first.as_bytes()[..CONTEXT_BYTES].try_into().unwrap();
+        let f = self.split(first)?;
+        let (descriptor, key, layout) = (f.descriptor, f.group, self.layout);
+        let context = &first.as_bytes()[..layout.context_len()];
         // Every chunk of the group has the same descriptor, so the same proof
         // length before its data.
-        let skip = CHUNK_FIXED + 32 * descriptor.proof_len();
+        let skip = layout.fixed() + 32 * descriptor.proof_len();
         let (id_prefix, group) = (&self.id_prefix, *group);
         decode_and_reencode_with(
             available,
@@ -369,7 +477,7 @@ where
             &SnappyBlockCompressor,
             out_rebuilt,
             |index, proof, data, leaf, pool| {
-                let frame = build_chunk(context, &key, &descriptor, index, proof, data);
+                let frame = layout.build(context, &key, &descriptor, index, proof, data);
                 ChunkMsg {
                     group,
                     index,
@@ -410,6 +518,52 @@ mod tests {
         let mut codec = PayloadCodec::new(VecBufferPool, TOPIC);
         let chunks = codec.build_chunks(&context(77), &descriptor, &shards);
         (codec, chunks)
+    }
+
+    /// A frame with no context: the group key is the descriptor's alone, an
+    /// attachment rides before the frame and changes neither the chunk nor
+    /// its id, and the group decodes and rebuilds as the payload's does.
+    #[test]
+    fn an_attached_layout_has_no_context() {
+        const OTHER: TypeId = TypeId(1);
+        let body: Vec<u8> = (0..120_000u32).map(|i| (i * 31 % 251) as u8).collect();
+        let (descriptor, shards) =
+            build_group::<Vec<u8>, _, _>(&body, &mut VecBufferPool, &SnappyBlockCompressor);
+        let mut codec: Codec =
+            PayloadCodec::with_layout(OTHER, Layout::Attached, VecBufferPool, b"/eth2/0/other");
+        let chunks = codec.build_chunks(&[], &descriptor, &shards);
+        let chunk = &chunks[2];
+        assert_eq!(Layout::Attached.fixed(), CHUNK_FIXED - CONTEXT_BYTES);
+        let mut keyed = vec![0x03];
+        keyed.extend_from_slice(&group_id(&descriptor));
+        assert_eq!(chunk.group, topic_group(OTHER, sha256(&keyed)));
+        assert_eq!(chunk.frame[..32], chunk.group.key);
+        assert!(TypeCodec::check(&codec, chunk));
+        assert!(TypeCodec::context(&codec, chunk).is_empty());
+        assert_eq!(codec.check_proof(chunk), ValidationResult::Accept);
+
+        // With and without an attachment the frame, and so the chunk, is one.
+        for attachment in [&b""[..], &[7u8; 300][..]] {
+            let mut message = Vec::new();
+            attach(attachment, &mut message);
+            message.extend_from_slice(&chunk.frame);
+            let (got, frame) = split_attached(&message).unwrap();
+            assert_eq!(got, attachment);
+            let read = codec.read_frame(frame.to_vec(), 0).unwrap();
+            assert_eq!(
+                (read.group, read.index, read.cached_id),
+                (chunk.group, chunk.index, chunk.cached_id)
+            );
+        }
+        assert_eq!(split_attached(&[9, 0, 1]), None);
+
+        // From the data chunks alone: the body, and every chunk as it was sent.
+        let k = descriptor.k() as usize;
+        let shape = Shape { n: descriptor.n(), k: descriptor.k() };
+        let mut rebuilt = PreallocVec::with_capacity(chunks.len());
+        let decoded = codec.decode(&chunks[0].group, &chunks[..k], &shape, &mut rebuilt).unwrap();
+        assert_eq!(decoded, body);
+        assert_eq!(rebuilt.as_slice(), chunks.as_slice());
     }
 
     /// A second topic's groups are of its own type: the wire's bytes say

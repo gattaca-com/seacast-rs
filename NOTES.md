@@ -108,6 +108,16 @@ Left as they are:
 - **F20: with the pool of wide bitmaps empty, a pair's indices past 127 are not kept**, and with no wide row left a group's bitmap is not written.
 - **`probe_answers` full:** a probe's answer then loses its exemption at the write.
 
+## A frame without context, and attachments
+
+Added 2026-11-26, for the signed aggregate in Silver: its chunks are to carry the aggregator's claim (committee, votes, a signature) and not a slot and block root, and only to a peer that does not have it yet.
+
+- **`Layout::Attached`** is the payload's frame less its context, with the group key the descriptor's alone. `PayloadCodec` takes the layout; `Layout::Payload` is the specification's and stays the default.
+- **The attachment is opaque here.** The binding frames it and splits it off; what is in it, when it is sent and what it is checked against are the host's. The node is not told of it: `TypeCodec::context` is empty for this layout, so the domain's answer on a group has to come from what the host kept of the attachment.
+- **Open: the window does not count an attachment.** `wire_size` is the frame's.
+- **Open: nothing binds an attachment to its group.** The group key commits the descriptor only. A host that needs the bond puts the group's root under the attachment's signature, or checks the attachment against the decoded body.
+- **Open: a group key without the slot has no time in it.** A body sent again in a later slot is the same group, and a tombstone of it refuses it until the tombstone goes.
+
 ## Several chunk topics in one node
 
 Added 2026-11-26, for a client that segments more than the payload (Silver: the envelope and the signed aggregate). Before it such a client ran a node a topic, each with its own tables, timers and send window.
