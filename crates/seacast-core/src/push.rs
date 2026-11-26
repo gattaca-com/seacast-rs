@@ -181,6 +181,16 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         for q in self.peers_of(set).filter(|&q| cand(self, q)) {
             let _ = targets.push(q);
         }
+        // The peers on links not slow are pushed to before any other, up to
+        // `r_fast` of them: an offer saves nothing on a link that keeps up.
+        let adaptive = self.config.link_adaptive;
+        let budget = match adaptive {
+            true => {
+                let fast = targets.iter().filter(|&&q| !self.link_slow(q)).count();
+                budget.max(fast.min(self.config.r_fast))
+            }
+            false => budget,
+        };
         if budget >= targets.len() {
             return targets;
         }
@@ -199,11 +209,12 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 (false, 0)
             };
             let tie = (catalog.tiebreak(&chunk.cached_id, p), catalog.node_id(p));
-            let _ = order.push(PushCand { unproven, known, tie, peer: p });
+            let slow = self.link_slow(p);
+            let _ = order.push(PushCand { slow, unproven, known, tie, peer: p });
         }
         order.as_mut_slice().sort_unstable_by(|a, b| {
-            (a.unproven, a.known)
-                .cmp(&(b.unproven, b.known))
+            (a.slow, a.unproven, a.known)
+                .cmp(&(b.slow, b.unproven, b.known))
                 .then(b.tie.cmp(&a.tie))
                 .then(a.peer.cmp(&b.peer))
         });

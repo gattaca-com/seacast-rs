@@ -198,6 +198,8 @@ pub struct Peer {
     /// The last pass over peers that took this one (`SeacastNode::mark`): a
     /// set of peers for one pass, without a list.
     pub(crate) mark: u64,
+    /// The host's word on the link: behind on what it is sent.
+    pub(crate) slow: bool,
 }
 
 impl Peer {
@@ -215,6 +217,7 @@ impl Peer {
             named_count: 0,
             wanted_count: 0,
             mark: 0,
+            slow: false,
         }
     }
 
@@ -231,6 +234,7 @@ impl Peer {
         self.named_count = 0;
         self.wanted_count = 0;
         self.mark = 0;
+        self.slow = false;
     }
 }
 
@@ -264,6 +268,8 @@ pub enum PeerSet {
 /// A candidate of a push, with what `choose_push` orders it by.
 #[derive(Debug, Clone, Copy)]
 pub struct PushCand {
+    /// On a link the host called slow: after those that are not.
+    pub slow: bool,
     pub unproven: bool,
     pub known: u32,
     pub tie: (u64, NodeId),

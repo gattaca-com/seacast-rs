@@ -612,8 +612,9 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 self.held_groups.insert(ask.group);
                 return false;
             }
-            // Nor is one for an index past what the node lacks to decode.
-            None if self.asks_reach_k(&ask.group, peer, catalog) => {
+            // Nor, of a peer on a slow link, one for an index past what the node
+            // lacks to decode.
+            None if self.link_slow(peer) && self.asks_reach_k(&ask.group, peer, catalog) => {
                 self.held_groups.insert(ask.group);
                 return false;
             }
@@ -633,12 +634,28 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         true
     }
 
+    /// The host tells that the link to `peer` is slow, or no longer is: the
+    /// peer is behind on what it is sent. Kept until the connection closes.
+    /// Read only under `NodeConfig::link_adaptive`.
+    pub fn set_link_slow(&mut self, peer: PeerId, slow: bool) {
+        if let Some(slot) = self.slots.get_mut(peer) {
+            slot.slow = slow;
+        }
+    }
+
+    /// Whether `peer` is on a link the host called slow, where the node
+    /// follows that.
+    pub(crate) fn link_slow(&self, peer: PeerId) -> bool {
+        self.config.link_adaptive && self.slots.get(peer).is_some_and(|slot| slot.slow)
+    }
+
     /// Whether the chunks held of `group` and the indices asked for are as
     /// many as it takes to decode. A node that decodes at `K` computes the
     /// rest, so it asks for no more: a source that offers every chunk is not
     /// made to send them all to each peer. An index left out is asked for
     /// when one asked for does not come, at the heartbeat's retry. Not for a
-    /// group that is not coded, nor for a node that does not decode at `K`.
+    /// group that is not coded, nor for a node that does not decode at `K`,
+    /// nor of a peer whose link is not slow: that one is asked for all.
     ///
     /// `K` is in a chunk's header and in no offer. Before the group's first
     /// chunk it is taken as half of what `peer` offers, a coded group having

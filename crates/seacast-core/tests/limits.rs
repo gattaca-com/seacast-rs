@@ -557,9 +557,8 @@ fn every_ask_of_an_offer_is_sent() {
         let _ = rpc.haves.push(Have::offer(group(tag), Bitmap::all_bits(300)));
     }
     world.rpc(1, rpc);
-    // Half of each group: its threshold is not known before a chunk of it.
     let asked: usize = world.node.asked_at.len();
-    assert_eq!(asked, 450);
+    assert_eq!(asked, 900);
     let mut sent = 0;
     for entry in world.drain(1) {
         for want in entry.wants.iter() {
@@ -1345,7 +1344,7 @@ fn a_group_of_a_type_not_joined_is_ignored() {
     let mut rpc = Rpc::default();
     let _ = rpc.haves.push(Have::offer(group(1), Bitmap::all_bits(8)));
     world.rpc(1, rpc);
-    assert_eq!(world.node.asked_at.len(), 4);
+    assert_eq!(world.node.asked_at.len(), 8);
 }
 
 /// A symmetric type keeps one relation both ways: grafted and answered as one,
@@ -2016,12 +2015,20 @@ fn sets_of_peers_are_not_cut_at_a_length() {
     assert!(offers + 1 >= share && offers <= share, "{offers} of {share}");
 }
 
-/// A node that decodes at `K` asks for no more of a coded group than it lacks
-/// to `K`, whatever it is offered. One that does not decode asks for all.
+/// A node that follows its links' speeds.
+fn adaptive(catalog: Catalog, peers: u64) -> World {
+    let config = NodeConfig { link_adaptive: true, ..NodeConfig::default() };
+    World::with_config(config, catalog, peers, InterestKind::All)
+}
+
+/// Of a peer on a slow link a node that decodes at `K` asks for no more of a
+/// coded group than it lacks to `K`, whatever it is offered. Of any other
+/// peer, and where it does not decode, it asks for all.
 #[test]
-fn asks_stop_at_what_a_decode_takes() {
-    let asked = |catalog: Catalog| {
-        let mut world = World::new(catalog, 2, InterestKind::All);
+fn asks_of_a_slow_link_stop_at_what_a_decode_takes() {
+    let asked = |catalog: Catalog, slow: bool| {
+        let mut world = adaptive(catalog, 2);
+        world.node.set_link_slow(1, slow);
         let g = group(1);
         // The chunk gives the group's count and threshold.
         world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
@@ -2030,24 +2037,24 @@ fn asks_stop_at_what_a_decode_takes() {
         let _ = rpc.haves.push(Have::offer(g, Bitmap::all_bits(8)));
         world.rpc(1, rpc);
         let asks = world.drain(1);
-        asks.iter()
-            .flat_map(|entry| entry.wants.iter())
-            .map(|want| want.bits.popcount())
-            .sum::<u32>()
+        let bits = asks.iter().flat_map(|entry| entry.wants.iter()).map(|w| w.bits.popcount());
+        bits.sum::<u32>()
     };
-    // One of four held: three more.
-    assert_eq!(asked(Catalog::new(8, 4)), 3);
+    // One of four held: three more of a slow link, all seven of another.
+    assert_eq!(asked(Catalog::new(8, 4), true), 3);
+    assert_eq!(asked(Catalog::new(8, 4), false), 7);
     // Not coded: every index is needed.
-    assert_eq!(asked(Catalog::new(8, 8)), 7);
+    assert_eq!(asked(Catalog::new(8, 8), true), 7);
     let mut sampler = Catalog::new(8, 4);
     sampler.later = Some(1.0);
-    assert_eq!(asked(sampler), 7);
+    assert_eq!(asked(sampler, true), 7);
 
     // An offer ahead of the group's first chunk: the threshold is in no
     // offer, and half of what is offered is asked for, coded or not. A chunk
     // then tells, and the rest of a group that is not coded is asked for.
     for (k, rest) in [(4, 0), (8, 4)] {
-        let mut world = World::new(Catalog::new(8, k), 2, InterestKind::All);
+        let mut world = adaptive(Catalog::new(8, k), 2);
+        world.node.set_link_slow(1, true);
         let g = group(1);
         let mut rpc = Rpc::default();
         let _ = rpc.haves.push(Have::offer(g, Bitmap::all_bits(8)));
@@ -2066,6 +2073,49 @@ fn asks_stop_at_what_a_decode_takes() {
         world.heartbeat();
         assert_eq!(asks(&mut world).and_not(&first).popcount(), rest, "k = {k}");
     }
+}
+
+/// A chunk goes to the peers on links not slow before any on a slow one, to
+/// more of them than the push degree, and a peer on a slow link is offered no
+/// more of a coded group than it lacks to decode.
+#[test]
+fn pushes_go_to_fast_links_and_offers_to_slow_ones_are_bounded() {
+    let peers: u64 = 9;
+    let mut world = adaptive(Catalog::new(8, 4), peers);
+    let g = group(1);
+    let fam = world.catalog.family(&g);
+    for peer in 1..=peers {
+        world.node.push_out.insert((peer, TYPE, fam, 0));
+    }
+    // Peer 1 is the sender; 2 to 5 keep up, 6 to 9 do not.
+    let slow = |peer: u64| peer >= 6;
+    for peer in 1..=peers {
+        world.node.set_link_slow(peer, slow(peer));
+    }
+    let (mut pushed, mut offered) = ([0u32; 10], [0u32; 10]);
+    for index in 0..8 {
+        world.rpc(1, chunk_rpc(chunk(g, index, [0; 32])));
+        for peer in 2..=peers {
+            for entry in world.drain(peer) {
+                pushed[peer as usize] += entry.chunk.is_some() as u32;
+                for h in entry.haves.iter().filter(|h| h.offer) {
+                    offered[peer as usize] += h.bits.popcount();
+                }
+            }
+        }
+    }
+    for peer in 2..=peers {
+        let (pushed, offered) = (pushed[peer as usize], offered[peer as usize]);
+        match slow(peer) {
+            // All four are pushed to, where the push degree alone takes two of
+            // the nine: until each is projected to have enough.
+            false => assert!(pushed >= 2, "peer {peer}: {pushed} {offered}"),
+            // Pushed to only once the fast links have enough, and pushed and
+            // offered no more than the threshold together.
+            true => assert!(pushed + offered <= 4, "peer {peer}: {pushed} {offered}"),
+        }
+    }
+    assert_eq!(world.node.config.r, 2);
 }
 
 /// Heartbeat gossip goes to `joined_peers()` (`seacast.md` §3), the links of a

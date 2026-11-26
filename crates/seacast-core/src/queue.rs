@@ -464,8 +464,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 }
             }
             if let Some(urgent_entry) = self.take_head(peer, true) {
-                if let Some(out) = self.with_owed(peer, urgent_entry) {
-                    self.note_offers_written(peer, &out);
+                if let Some(out) = self.with_offers(peer, urgent_entry) {
                     return DispatchOutcome::Send(out);
                 }
                 continue;
@@ -474,8 +473,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 self.sends.queue.get(peer).map(|q| q.normal.is_empty()).unwrap_or(true);
             if normal_empty {
                 if self.sends.has_owed_offers(peer) {
-                    if let Some(out) = self.with_owed(peer, QueueEntry::empty()) {
-                        self.note_offers_written(peer, &out);
+                    if let Some(out) = self.with_offers(peer, QueueEntry::empty()) {
                         return DispatchOutcome::Send(out);
                     }
                 }
@@ -523,12 +521,53 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                         self.origin_written(g, i, env, catalog);
                     }
                 }
-                if let Some(final_entry) = self.with_owed(peer, out_entry) {
-                    self.note_offers_written(peer, &final_entry);
+                if let Some(final_entry) = self.with_offers(peer, out_entry) {
                     return DispatchOutcome::Send(final_entry);
                 }
             }
         }
+    }
+
+    /// `entry` with the offers owed to `peer`, as it is written: cut to what a
+    /// slow link is offered, and recorded. `None`: nothing is left to write.
+    fn with_offers(&mut self, peer: PeerId, entry: QueueEntry<B>) -> Option<QueueEntry<B>> {
+        let mut entry = self.with_owed(peer, entry)?;
+        self.trim_offers(peer, &mut entry);
+        if entry.is_empty() {
+            return None;
+        }
+        self.note_offers_written(peer, &entry);
+        Some(entry)
+    }
+
+    /// A peer on a slow link is offered no more of a coded group than it
+    /// lacks to decode, counting what it holds and what it has been pushed,
+    /// sent and offered: it then asks this node for no more. The lowest
+    /// indices are kept.
+    fn trim_offers(&mut self, peer: PeerId, entry: &mut QueueEntry<B>) {
+        if !self.link_slow(peer) {
+            return;
+        }
+        for h in entry.haves.as_mut_slice().iter_mut().filter(|h| h.offer) {
+            let Some(shape) = self.groups.get(&h.group).and_then(|rec| rec.hdr) else {
+                continue;
+            };
+            if shape.k >= shape.n {
+                continue;
+            }
+            let key = (peer, h.group);
+            let known = self.pairs.has_bits(&key) |
+                self.pairs.pushed_bits(&key) |
+                self.pairs.sent_to(&key).unwrap_or_default() |
+                self.pairs.offered_to(&key).unwrap_or_default();
+            let room = shape.k.saturating_sub(known.popcount()) as usize;
+            let mut kept = Bitmap::new();
+            for index in h.bits.and_not(&known).iter().take(room) {
+                kept.set(index);
+            }
+            h.bits = kept;
+        }
+        entry.haves.retain(|h| !h.offer || !h.bits.is_empty());
     }
 
     /// Records offers written to `peer` so answers to asks on them are exempt

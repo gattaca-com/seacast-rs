@@ -460,6 +460,13 @@ pub struct NodeConfig {
     pub window_enabled: bool,
     /// Card 15: Paced heartbeat gossip (`PACED`).
     pub paced_gossip: bool,
+    /// The node follows what the host tells of its links
+    /// (`SeacastNode::set_link_slow`). A chunk is pushed to the peers on
+    /// links not slow, up to `r_fast` of them, before any on a slow link,
+    /// and to `r` peers at the least. A peer on a slow link is offered no
+    /// more of a coded group than it lacks to decode, and is asked for no
+    /// more than the node lacks. Off, links are not told apart.
+    pub link_adaptive: bool,
     /// When a source offers its chunks (`SOURCE_OFFERS`).
     pub source_offers: SourceOffers,
     /// Card 16: Furthest-behind-first target selection with proof guard.
@@ -625,6 +632,7 @@ impl Default for NodeConfig {
             project_enabled: true,
             window_enabled: true,
             paced_gossip: true,
+            link_adaptive: false,
             source_offers: SourceOffers::Ack,
             card16_enabled: true,
             card17_enabled: true,

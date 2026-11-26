@@ -108,6 +108,17 @@ Left as they are:
 - **F20: with the pool of wide bitmaps empty, a pair's indices past 127 are not kept**, and with no wide row left a group's bitmap is not written.
 - **`probe_answers` full:** a probe's answer then loses its exemption at the write.
 
+## Links told apart by the host
+
+Added 2026-11-26, after Silver's lab on rate-limited links. The origin of a body sent each peer the whole coded set (see the next section), and a full mesh of nine peers on a slow uplink lost streams to the receivers' stall rule. Silver can now tell when a peer is behind: the transport takes no more than the path's congestion window, and the oldest message waiting for a peer is timed.
+
+- **`set_link_slow` and `link_adaptive`.** The host's word is a flag of the peer, reset with the connection. The node pushes to links not slow first and wider (`choose_push`), trims the offers it writes to a slow link (`trim_offers`, at the write, so every path to an offer passes it), and bounds its asks of a slow link (`may_ask`).
+- **The ask bound of the next section is now of slow links only.** With `link_adaptive` off the node asks as the specification does, and the simulator's summary is the one from before that section.
+- **Open: the flag is of the path from this node to the peer, and an ask loads the path back.** The same flag stands for both. On an asymmetric path it is wrong one way.
+- **Open: an offer cut at the write is not owed.** A peer on a slow link that lacks more than it was offered, a connection of its other sources having dropped, is not offered the rest by this node until its link is no longer slow.
+- **Open: no simulator setting marks a link slow**, so nothing here is measured outside Silver's lab.
+- **Open: every link starts as not slow.** The first burst to a new peer is pushed wide.
+
 ## Asks bounded by what a decode takes
 
 Added 2026-11-26. In Silver's lab the origin of an aggregate sent each of its peers the whole coded set: it pushes a chunk to `R` peers and offers the rest, and each peer asked for every chunk it was offered and did not hold.
