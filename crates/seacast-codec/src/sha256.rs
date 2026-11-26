@@ -334,7 +334,7 @@ impl Sha256 {
     }
 }
 
-/// Computes the SHA-256 digest of `data` (`sha256` in `protocol.md` §1).
+/// Computes the SHA-256 digest of `data` (`sha256` in `seacast-lite.md` §1).
 #[inline]
 pub fn sha256(data: &[u8]) -> Bytes32 {
     let mut h = Sha256::new();

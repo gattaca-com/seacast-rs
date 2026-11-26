@@ -13,16 +13,16 @@ use crate::{
     snappy,
 };
 
-/// Target uncompressed segment size (`UNIT = 16 KiB` in `protocol.md` §1
+/// Target uncompressed segment size (`UNIT = 16 KiB` in `seacast-lite.md` §1
 /// `[c1]`).
 pub const UNIT: usize = 16 * 1024;
 
-/// Maximum coded chunks (data + parity) (`MAX_CHUNKS = 256` in `protocol.md` §1
-/// `[c6]`).
+/// Maximum coded chunks (data + parity) (`MAX_CHUNKS = 256` in
+/// `seacast-lite.md` §1 `[c6]`).
 pub const MAX_CHUNKS: u32 = 256;
 
-/// Maximum chunks of a coded group (`MAX_CHUNKS`, `protocol.md` §1 `[c6]`). A
-/// body past `MAX_CHUNKS / 2` segments goes plain.
+/// Maximum chunks of a coded group (`MAX_CHUNKS`, `seacast-lite.md` §1 `[c6]`).
+/// A body past `MAX_CHUNKS / 2` segments goes plain.
 pub const MAX_CODED_CHUNKS: u32 = MAX_CHUNKS;
 
 /// Maximum plain (uncoded) chunks supported by a group (`MAX_BITMAP_BITS =
@@ -33,7 +33,7 @@ pub const MAX_PLAIN_CHUNKS: usize = MAX_BITMAP_BITS;
 pub const MAX_PLAIN_BODY: usize = MAX_PLAIN_CHUNKS * UNIT;
 
 /// Maximum segment byte size (`MAX_SEGMENT_SIZE = 2 * UNIT = 32 KiB` in
-/// `protocol.md` §1 `[c1]`).
+/// `seacast-lite.md` §1 `[c1]`).
 pub const MAX_SEGMENT_SIZE: u32 = (2 * UNIT) as u32;
 
 /// Longest body a coded group carries: `MAX_CODED_CHUNKS / 2` data segments of
@@ -67,7 +67,7 @@ impl Compressor for SnappyBlockCompressor {
 }
 
 /// `SegmentDescriptor`: the header of a segmented group, which the domain
-/// commits (`protocol.md` §1 `[c1]`).
+/// commits (`seacast-lite.md` §1 `[c1]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SegmentDescriptor {
     /// `2` = coded (Reed–Solomon parity after the data); `1` = plain.
@@ -89,7 +89,7 @@ pub struct SegmentDescriptor {
 
 impl SegmentDescriptor {
     /// Serializes the descriptor into its SSZ layout (`serialize(d)` in
-    /// `protocol.md` §1).
+    /// `seacast-lite.md` §1).
     pub fn serialize(&self) -> [u8; DESCRIPTOR_BYTES] {
         let mut out = [0u8; DESCRIPTOR_BYTES];
         out[0] = self.version;
@@ -121,7 +121,7 @@ impl SegmentDescriptor {
     }
 
     /// Number of data chunks `K(d) = ceil(d.total_length / d.segment_size)`
-    /// (`protocol.md` §1).
+    /// (`seacast-lite.md` §1).
     #[inline]
     pub fn k(&self) -> u32 {
         if self.segment_size == 0 {
@@ -132,14 +132,14 @@ impl SegmentDescriptor {
         u32::try_from(self.total_length.div_ceil(self.segment_size as u64)).unwrap_or(u32::MAX)
     }
 
-    /// Total number of chunks `N(d) = d.count` (`protocol.md` §1).
+    /// Total number of chunks `N(d) = d.count` (`seacast-lite.md` §1).
     #[inline]
     pub fn n(&self) -> u32 {
         self.count
     }
 
     /// Expected byte length of chunk `index` (`segment_length(d, i)` in
-    /// `protocol.md` §1).
+    /// `seacast-lite.md` §1).
     #[inline]
     pub fn segment_length(&self, index: u32) -> usize {
         let k = self.k();
@@ -163,7 +163,7 @@ impl SegmentDescriptor {
     }
 
     /// Checks whether this descriptor is valid before allocating group state
-    /// (`valid_descriptor(d)` in `protocol.md` §1).
+    /// (`valid_descriptor(d)` in `seacast-lite.md` §1).
     pub fn is_valid(&self) -> bool {
         if self.hash_id != 0 || self.segment_size == 0 || self.segment_size > MAX_SEGMENT_SIZE {
             return false;
@@ -188,7 +188,8 @@ impl SegmentDescriptor {
     }
 }
 
-/// Computes `group_id(d) = sha256(0x02 || serialize(d))` (`protocol.md` §1).
+/// Computes `group_id(d) = sha256(0x02 || serialize(d))` (`seacast-lite.md`
+/// §1).
 pub fn group_id(d: &SegmentDescriptor) -> Bytes32 {
     let mut h = Sha256::new();
     h.update(&[0x02]);
@@ -310,7 +311,7 @@ pub fn frame_identity(frame: &[u8], context_len: usize) -> (Bytes32, Option<Byte
 }
 
 /// `Shard`: a chunk's content and stack-allocated [`MerkleProof`] built by the
-/// publisher (`protocol.md` §1).
+/// publisher (`seacast-lite.md` §1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shard<B> {
     pub index: u32,
@@ -320,7 +321,7 @@ pub struct Shard<B> {
 
 /// Compresses and segments `body`, Reed–Solomon-encodes it where a coded
 /// group holds it, and builds the Merkle tree (`build_group(body)` in
-/// `protocol.md` §1 `[c1, c6]`).
+/// `seacast-lite.md` §1 `[c1, c6]`).
 ///
 /// A body past the coded size is compressed too and cut at `UNIT`, as Prysm's
 /// publisher cuts it. Only where its compression has more segments than a
@@ -386,10 +387,10 @@ where
     (descriptor, shards)
 }
 
-/// The part of level 1 that reads no data (`validate_chunk` in `protocol.md`
-/// §3): the frame splits, its descriptor is valid, `group` is the id of
-/// `type_id`, the descriptor and the context, `index` is one the descriptor
-/// has, and the data has the length it gives.
+/// The part of level 1 that reads no data (`validate_chunk` in
+/// `seacast-lite.md` §3): the frame splits, its descriptor is valid, `group` is
+/// the id of `type_id`, the descriptor and the context, `index` is one the
+/// descriptor has, and the data has the length it gives.
 pub fn check_frame(
     type_id: TypeId,
     group: &GroupId,
@@ -464,11 +465,11 @@ where
 }
 
 /// Level 2 on a group whose chunks are kept where they were written
-/// (`protocol.md` §3, §4.6): `data` is the `K` data segments end to end, every
-/// one `segment_size` bytes, the last padded with zeros; `parity` is the other
-/// `N - K` chunks, laid out the same way; `have(i)` says chunk `i` is there.
-/// Every missing chunk is computed into its place, nothing present is moved,
-/// and the tree over all `N` must have the committed root.
+/// (`seacast-lite.md` §3, §4.6): `data` is the `K` data segments end to end,
+/// every one `segment_size` bytes, the last padded with zeros; `parity` is the
+/// other `N - K` chunks, laid out the same way; `have(i)` says chunk `i` is
+/// there. Every missing chunk is computed into its place, nothing present is
+/// moved, and the tree over all `N` must have the committed root.
 ///
 /// `hashes[i]` is the leaf digest of chunk `i` as level 1 proved it
 /// ([`frame_leaf_hash`]), for every chunk that is there; the other entries are
@@ -552,7 +553,7 @@ fn data_at<B: ChunkBytes>(chunk: &ChunkMsg<B>, skip: usize) -> &[u8] {
 /// Level 2 decoding: reconstructs all `N` chunks from any `K` verified chunks
 /// in `available`, re-encodes parity, verifies the Merkle root, populates
 /// `out_rebuilt` with all `N` chunks, and returns the decompressed body
-/// allocated via `pool` (`decode_and_reencode` in `protocol.md` §1, §4.6).
+/// allocated via `pool` (`decode_and_reencode` in `seacast-lite.md` §1, §4.6).
 pub fn decode_and_reencode<B, Pool, Comp>(
     available_chunks: &[ChunkMsg<B>],
     context_len: usize,
@@ -1147,7 +1148,7 @@ mod tests {
             decode_and_reencode(&available[1..], CONTEXT.len(), &mut pool, &comp, &mut rebuilt,),
             None
         );
-        // A coded descriptor past `MAX_CHUNKS` is rejected (`protocol.md` §1).
+        // A coded descriptor past `MAX_CHUNKS` is rejected (`seacast-lite.md` §1).
         let wide_coded = SegmentDescriptor {
             version: 2,
             hash_id: 0,

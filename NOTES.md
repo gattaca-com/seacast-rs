@@ -27,7 +27,7 @@ Questions that need Silver's code read (tcache):
 - **One catalog object implements all three traits.** `PayloadCatalog` therefore forwards every `TypeCodec` method to its `SegmentedCodec`. Passing codec, domain and policy to the node as separate arguments would remove the forwarding and change every entry point's signature.
 - **No catalog composes several types.** `SegmentedCodec` and `StandaloneCodec` are each one type's `TypeCodec`; a host with several types dispatches on the group's `type_id` itself. A node joins at most `MAX_JOINED_TYPES`.
 - **Cost with many types is not measured.** A host with a type per subnet joins up to about 200. `maintain_relations` and the heartbeat's gossip walk every joined type, `joined_types()` returns `MAX_JOINED_TYPES` ids by value, and each connection's record holds three maps sized `max_types`.
-- **A chunk's context is in every chunk.** A type whose context is long (a column's commitments) pays it N times. `protocol-v2.md` sends a header once a group and link; not done here.
+- **A chunk's context is in every chunk.** A type whose context is long (a column's commitments) pays it N times. `seacast.md` sends a header once a group and link; not done here.
 - **A cancelled push leaves an offer owed** through `SendQueues::owe`. Whether the node should send that offer itself was left open.
 - **`on_chunk_head` trusts the host's proof check.** It drops a copy of a chunk held, or of one that waits, on its head alone. A host that leaves the proof to `TypeCodec::check_proof` must not call it. A copy of a chunk that waits is told only by its id, which no chunk's head gives, since the id hashes the frame: such a copy from another peer is read. The entry has one test, with scripted peers.
 - **Capacities follow the types joined** (`CapacityConfig::size_for`, from `TypeParams::max_indices` and `max_groups_per_slot`). Open points:
@@ -108,6 +108,22 @@ Left as they are:
 - **F20: with the pool of wide bitmaps empty, a pair's indices past 127 are not kept**, and with no wide row left a group's bitmap is not written.
 - **`probe_answers` full:** a probe's answer then loses its exemption at the write.
 
+## The specification's v0.12.0 to v0.13.0-rc.1 changes
+
+No rule changed. The pseudo-code of `seacast-lite.md` and `seacast-bindings.md` is the same at both versions, and `seacast.md`'s differs by the two items marked below. Applied 2026-11-26, with the restructure that followed the release candidate (reasons moved to `seacast-rationale.md` and `seacast-lite-rationale.md`, BCP 14 key words):
+
+- **Heartbeat gossip goes to `joined_peers()`** (`seacast.md` §3, defined in v0.13.0-rc.1): the links of a type the node runs, where it went to any peer whose JOIN was recorded. The two differ only while our JOIN to the peer is owed to a full queue. Covered by `heartbeat_gossip_goes_to_links_only` in `crates/seacast-core/tests/limits.rs`.
+- **`propose_colour` removed** (`seacast.md` §1.4, §4.1; pseudo-code change): nothing called it.
+- **`on_header_validated`'s order** (`seacast.md` §4.2; pseudo-code change): no change here, `on_groups_authenticated` walks the host's slice in order.
+- **A sample's hunt ends when it arrives** (`seacast.md` §4.10, prose): no change here, `ask_sample` returns for an index held.
+- **Citations renamed** to `seacast.md`, `seacast-lite.md` and `seacast-bindings.md` throughout, which the v0.12.0 entry below recorded but had not done. Section numbers are unchanged.
+
+Open:
+
+- **Whether the normal lane's control should bypass the window** is now listed as open in `seacast-lite.md` §7.1. Nothing done.
+- **The moved prose was not read line by line.** "No rule changed" rests on the pseudo-code, the settings tables and the commit messages.
+- **A client's aggregate chunks carry other bytes where the payload's frame has `beacon_block_root`.** Silver's adapter writes `committee_bits` and `aggregation_bits` there, to tell a group whose votes one held already has before its chunks are taken. The core and `PayloadCodec` treat those 32 bytes as opaque, so nothing changes here, but `Chunk::beacon_block_root` in `seacast-gossipsub` no longer names every use, and the specification has no such frame.
+
 ## The specification's v0.10.11 to v0.12.0 changes
 
 Applied 2026-11-23:
@@ -126,8 +142,8 @@ Applied 2026-11-23:
 
 Applied 2026-11-22:
 
-- **`on_validated` and `forward` skip axes where the index is already `Received`** (`protocol-v2.md` §4.2, §4.4, v0.10.6), while still forwarding an index held only as `Rebuilt`. Covered by `a_second_id_for_a_received_index_is_not_forwarded` in `crates/seacast-core/tests/limits.rs`.
-- **The window's waiter line skips writers mid-write** (`RuntimeEnv::is_writing`, `SeacastNode::write_waits`, `protocol-v2.md` §4.11, v0.10.7 and v0.10.9). `RuntimeEnv::is_writing` defaults to `false`, and the simulator does not model mid-write backpressure. Covered by `the_window_line_skips_a_writer_mid_write` in `crates/seacast-core/tests/limits.rs`.
+- **`on_validated` and `forward` skip axes where the index is already `Received`** (`seacast.md` §4.2, §4.4, v0.10.6), while still forwarding an index held only as `Rebuilt`. Covered by `a_second_id_for_a_received_index_is_not_forwarded` in `crates/seacast-core/tests/limits.rs`.
+- **The window's waiter line skips writers mid-write** (`RuntimeEnv::is_writing`, `SeacastNode::write_waits`, `seacast.md` §4.11, v0.10.7 and v0.10.9). `RuntimeEnv::is_writing` defaults to `false`, and the simulator does not model mid-write backpressure. Covered by `the_window_line_skips_a_writer_mid_write` in `crates/seacast-core/tests/limits.rs`.
 - **The Waggle, libp2p stream, partial-messages and draft native QUIC bindings are not implemented**, and cell header form (c) has no wire kind defined in the specification.
 
 ## The specification's v0.10.2 to v0.10.4 changes

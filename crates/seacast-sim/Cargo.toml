@@ -3,7 +3,7 @@ name = "seacast-sim"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Discrete-event network simulator and invariant checker for SEACAST v2"
+description = "Discrete-event network simulator and invariant checker for SEACAST"
 
 [dependencies]
 seacast-core = { path = "../seacast-core" }

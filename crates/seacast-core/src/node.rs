@@ -21,8 +21,8 @@ use crate::{
 pub type PacedGossip =
     (GenerationPeerId, InlineVec<(GroupId, Bitmap), MAX_GOSSIP_GROUPS>, Timestamp);
 
-/// Standalone `sans-io` state machine for a SEACAST v2 node (`protocol-v2.md` +
-/// `protocol.md` v0.8).
+/// Standalone `sans-io` state machine for a SEACAST node (`seacast.md` +
+/// `seacast-lite.md` v0.8).
 ///
 /// All state tables are preallocated with fixed capacities in
 /// [`SeacastNode::new`]. Protocol execution performs **no heap allocation**;
@@ -31,7 +31,7 @@ pub type PacedGossip =
 pub struct SeacastNode<B> {
     pub config: NodeConfig,
 
-    /// The per-peer send queues and the byte window (`protocol-v2.md` §4.11,
+    /// The per-peer send queues and the byte window (`seacast.md` §4.11,
     /// §4.12).
     pub sends: SendQueues,
 
@@ -41,25 +41,25 @@ pub struct SeacastNode<B> {
     /// below `max_peers`.
     pub slots: PeerSlab<Peer>,
     /// The parks of a node whose connection closed, until their end: a
-    /// `PeerId` is a connection's, and a park outlives it (`protocol.md`
+    /// `PeerId` is a connection's, and a park outlives it (`seacast-lite.md`
     /// §8.1).
     pub kept_parks: PreallocMap<(NodeId, GroupId), Timestamp>,
 
-    // Per link and object type (`protocol-v2.md` §3)
+    // Per link and object type (`seacast.md` §3)
     pub push_out: Relations,
     pub push_in: Relations,
     /// The peers linked for each type: both JOINs have crossed (`links(T)`).
     pub(crate) linked: PeerSets<TypeId>,
     /// Our GRAFTs not yet answered: "push me" and "I will push you". They count
-    /// for nothing until the peer's yes (`protocol-v2.md` §4.1).
+    /// for nothing until the peer's yes (`seacast.md` §4.1).
     pub grafted_in: PreallocSet<(PeerId, TypeId, FamilyId, Colour)>,
     pub grafted_out: PreallocSet<(PeerId, TypeId, FamilyId, Colour)>,
     /// Until when a relation a peer's PRUNE ended is not grafted again; `true`
     /// for our "push me" (`backoff`).
     pub backoff: PreallocMap<(PeerId, TypeId, FamilyId, Colour, bool), Timestamp>,
 
-    // Per group state (`protocol-v2.md` §3, `protocol.md` §8.1)
-    /// Per group state (`protocol-v2.md` §3, `protocol.md` §8.1), a record a
+    // Per group state (`seacast.md` §3, `seacast-lite.md` §8.1)
+    /// Per group state (`seacast.md` §3, `seacast-lite.md` §8.1), a record a
     /// group.
     pub groups: Groups,
     pub chunks: PreallocMap<(GroupId, u32), ChunkMsg<B>>,
@@ -67,7 +67,7 @@ pub struct SeacastNode<B> {
     /// Until when each expired group is kept out.
     pub tombstones: PreallocMap<GroupId, Timestamp>,
 
-    // Per peer and group diffusion state (`protocol-v2.md` §3)
+    // Per peer and group diffusion state (`seacast.md` §3)
     /// `peer_has`, `pushed`, `sent_to`, `served`, `want_p`, `offered` and
     /// `park`, a record a pair.
     pub pairs: Pairs,
@@ -85,7 +85,7 @@ pub struct SeacastNode<B> {
     /// The peers that claim each group whole (`claims`).
     pub claims: PeerSets<GroupId>,
 
-    // Pull discipline, offer ledger, promises, and parking (`protocol.md` §6.1, §8.1)
+    // Pull discipline, offer ledger, promises, and parking (`seacast-lite.md` §6.1, §8.1)
     pub offers: PreallocMap<Ask, InlineVec<PeerId, MAX_INLINE_OFFERS>>,
     pub tried: AskPeers<Timestamp>,
     pub asked_at: PreallocMap<Ask, Timestamp>,
@@ -101,19 +101,19 @@ pub struct SeacastNode<B> {
     /// a table.
     pub(crate) expiring: PreallocSet<GroupId>,
 
-    // Claims, deferral, probe, and IncrementalDAS repair sampling (`protocol-v2.md` §3, §4.6)
+    // Claims, deferral, probe, and IncrementalDAS repair sampling (`seacast.md` §3, §4.6)
     pub probe_asks: PreallocSet<Ask>,
     /// As a claimant still decoding: the first marked ask per asker and group
     /// of an index we claim and have not stored, answered when it is
-    /// (`probe_waiting`, `protocol-v2.md` §4.6). By chunk, and by asker and
+    /// (`probe_waiting`, `seacast.md` §4.6). By chunk, and by asker and
     /// group; an entry is in both or neither.
     pub probe_waiting: PeerSets<(GroupId, u32)>,
     pub probe_waiting_of: PreallocMap<(PeerId, GroupId), u32>,
     /// As a claimant: answers to probes, by the chunk's own group and index,
-    /// until they are written (`protocol-v2.md` §4.6 `probe_answers`).
+    /// until they are written (`seacast.md` §4.6 `probe_answers`).
     pub probe_answers: PreallocSet<(PeerId, GroupId, u32)>,
     /// The peers asked for a sample, by the sample's scope, one each, until
-    /// the time kept (`protocol-v2.md` §4.10 `sampled_from`, I6).
+    /// the time kept (`seacast.md` §4.10 `sampled_from`, I6).
     pub sampled_from: PreallocMap<(GroupId, PeerId), Timestamp>,
     /// Second-phase sample asks waiting, by scope (`samples_in_flight`).
     pub samples_in_flight: PreallocMap<GroupId, usize>,
@@ -125,7 +125,7 @@ pub struct SeacastNode<B> {
     /// does not reset the count.
     pub forwarded: PreallocMap<(NodeId, TypeId), usize>,
     /// As a source: the pushes planned at `publish` that were not made, and so
-    /// are owed. With the pushes made, the plan (`protocol-v2.md` §4.7
+    /// are owed. With the pushes made, the plan (`seacast.md` §4.7
     /// `planned`): whom a chunk is not offered at its acknowledgement.
     pub plan_refused: PreallocSet<(PeerId, GroupId, u32)>,
     pub rsample_asked: PreallocSet<(GroupId, u32, PeerId)>,
@@ -133,7 +133,7 @@ pub struct SeacastNode<B> {
     /// groups that have one.
     pub rsamples: PreallocMap<GroupId, InlineVec<u32, MAX_BITMAP_BITS>>,
 
-    // Gate deferral & equivocation ties (`protocol.md` §4.2)
+    // Gate deferral & equivocation ties (`seacast-lite.md` §4.2)
     pub seen_ids: PreallocSet<ChunkId>,
     /// Chunks waiting for the domain's word on their group, with when each
     /// is dropped.
@@ -178,7 +178,7 @@ pub struct SeacastNode<B> {
 }
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// Creates a new SEACAST v2 node state machine and preallocates all
+    /// Creates a new SEACAST node state machine and preallocates all
     /// fixed-capacity state tables.
     pub fn new(config: NodeConfig) -> Self {
         let cap = &config.capacities;
@@ -305,7 +305,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Cleans up all per-connection state when a peer disconnects
-    /// (`protocol.md` §8.1). Its parks are kept by node, for its next
+    /// (`seacast-lite.md` §8.1). Its parks are kept by node, for its next
     /// connection.
     pub fn disconnect_peer<E, D>(&mut self, peer: PeerId, env: &mut E, deferred_store: &mut D)
     where
@@ -375,7 +375,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         // A claim is a connection's: a gone claimant is neither probed nor counted.
         // Our probe of it, not yet judged, gets no verdict, and our own repair is
         // reconsidered at the duty's own time, at once if that has passed
-        // (`claims_close`, `protocol-v2.md` §4.6).
+        // (`claims_close`, `seacast.md` §4.6).
         self.claims.remove_peer(peer);
         let now = env.now();
         for (&g, rec) in self.groups.iter_mut() {
@@ -407,7 +407,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Starts a new period of the limits the specification counts per slot:
     /// the routed requests passed on per peer (`FORWARD_LIMIT`,
-    /// `protocol-v2.md` §4.5). The host calls it at its slot boundary, or on
+    /// `seacast.md` §4.5). The host calls it at its slot boundary, or on
     /// a period of its own where it has no slots.
     pub fn reset_period(&mut self) {
         self.forwarded.clear();
@@ -417,7 +417,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     // §4. Events: Top-Level RPC & Timer Dispatch
     // =========================================================================
 
-    /// Handles an incoming standalone `Rpc` from `peer` (`protocol-v2.md` §4
+    /// Handles an incoming standalone `Rpc` from `peer` (`seacast.md` §4
     /// `on_frame`).
     pub fn on_frame<E, C, R, D>(
         &mut self,
@@ -536,7 +536,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.unwanted.insert((peer, id))
     }
 
-    /// Sends one combined response per RPC handled (`protocol.md` §4.1
+    /// Sends one combined response per RPC handled (`seacast-lite.md` §4.1
     /// `respond`).
     pub fn respond<E>(
         &mut self,
@@ -564,7 +564,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
     }
 
-    /// Dispatches a scheduled `TimerEvent` (`protocol-v2.md` §4).
+    /// Dispatches a scheduled `TimerEvent` (`seacast.md` §4).
     pub fn on_timer<E, C, R, D>(
         &mut self,
         event: TimerEvent,
@@ -591,7 +591,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             }
             TimerEvent::WindowTimeout { peer, group, index, at_bits } => {
                 // No holding came in time for a chunk this node published, which
-                // is acknowledged anyway (`protocol-v2.md` §4.11
+                // is acknowledged anyway (`seacast.md` §4.11
                 // `window_timeout`).
                 if self.sends.window_timeout((peer, group, index), at_bits, env) &&
                     self.groups.has_bits(&group, GroupBits::Origin)
@@ -670,7 +670,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Whether `group` failed level 2 or 3 (`drop_group`): its chunks are not
-    /// acted on (`protocol-v2.md` §4.6).
+    /// acted on (`seacast.md` §4.6).
     #[inline]
     pub fn dropped(&self, group: &GroupId) -> bool {
         self.groups.get(group).and_then(|r| r.state.as_ref()) == Some(&GroupState::Invalid)

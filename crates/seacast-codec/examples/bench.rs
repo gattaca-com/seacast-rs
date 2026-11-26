@@ -67,7 +67,7 @@ fn structured(len: usize, seed: u64) -> Vec<u8> {
 /// Level 2 of a `(K, 2K)` group of which a node holds `x` data chunks and `y =
 /// K - x` parity chunks, under two commitments, step by step and whole.
 ///
-/// One root over all `N` leaves (`protocol.md` §3): recover the `y` missing
+/// One root over all `N` leaves (`seacast-lite.md` §3): recover the `y` missing
 /// data chunks, recompute the `K - y` missing parity chunks, check the root
 /// over `N` leaves. A root over the data leaves alone: recover the `y` missing
 /// data chunks, check the root over `K` leaves. The parity check that

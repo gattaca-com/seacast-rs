@@ -1,6 +1,6 @@
 //! What a peer sends cannot crash a node or grow its state past its limits, and
-//! nothing it is owed or has asked for is left behind (`protocol.md` §8.1,
-//! §8.2; `protocol-v2.md` §2, §3, §6.3).
+//! nothing it is owed or has asked for is left behind (`seacast-lite.md` §8.1,
+//! §8.2; `seacast.md` §2, §3, §6.3).
 
 use seacast_core::{
     Ask, Bitmap, BoundedDeferredStore, ChunkId, ChunkMsg, Control, Direction, DispatchOutcome,
@@ -1079,7 +1079,7 @@ fn a_backoff_run_out_holds_no_relation_place() {
 /// A GRAFT counts for nothing until it is answered: the relation is entered at
 /// the peer's yes, a peer's own GRAFT is answered yes, a PRUNE ends the
 /// relation and holds the next GRAFT back for the backoff, and none of these is
-/// lost to a full queue (`protocol-v2.md` §4.1).
+/// lost to a full queue (`seacast.md` §4.1).
 #[test]
 fn a_graft_is_answered_and_a_prune_backs_off() {
     let grafts = |world: &mut World| -> Vec<Graft> {
@@ -1155,7 +1155,7 @@ fn a_graft_is_answered_and_a_prune_backs_off() {
 /// A source with no relation peer pushes to its links, and offers a chunk to
 /// the links it did not push it to when a copy is known to have arrived: at a
 /// holding that names it, or at its window's timeout, and once
-/// (`protocol-v2.md` §4.7 `source_pool`, `origin_acked`).
+/// (`seacast.md` §4.7 `source_pool`, `origin_acked`).
 #[test]
 fn a_source_offers_at_the_acknowledgement() {
     let offers = |world: &mut World, peer: PeerId| -> usize {
@@ -1222,7 +1222,7 @@ fn a_source_offers_at_the_acknowledgement() {
 
 /// A claimant answers the probe of its claim whatever the asker holds, once for
 /// the group: the answer is written though the asker holds the chunk, and a
-/// second marked ask is an ask for a claimed chunk (`protocol-v2.md` §4.6, R5).
+/// second marked ask is an ask for a claimed chunk (`seacast.md` §4.6, R5).
 #[test]
 fn a_probe_of_a_claim_is_answered_once() {
     let mut world = World::new(Catalog::new(8, 8), 2, InterestKind::All);
@@ -1308,7 +1308,7 @@ fn a_pair_keeps_wide_bitmaps_while_the_pool_has_room() {
 }
 
 /// A chunk that waits in a peer's queue is not written once the peer says it
-/// holds it (`protocol.md` §7.2 `filter_entry`).
+/// holds it (`seacast-lite.md` §7.2 `filter_entry`).
 #[test]
 fn a_queued_chunk_is_not_written_to_a_peer_that_holds_it() {
     let mut world = World::new(Catalog::new(8, 8), 2, InterestKind::All);
@@ -1349,7 +1349,7 @@ fn a_group_of_a_type_not_joined_is_ignored() {
 
 /// A symmetric type keeps one relation both ways: grafted and answered as one,
 /// ended both ways by a PRUNE, made whole where it is held one way, and pruned
-/// at the cap (`protocol-v2.md` §4.1).
+/// at the cap (`seacast.md` §4.1).
 #[test]
 fn a_symmetric_relation_is_one_both_ways() {
     let grafts = |world: &mut World, peer| -> Vec<Graft> {
@@ -1414,7 +1414,7 @@ fn a_symmetric_relation_is_one_both_ways() {
 /// A relation is grafted only on a link whose peer's interest holds the family,
 /// and the links a floor is short of are reported, a peer of high custody
 /// counting for `COVER_HIGH` families of a floor that asks for diversity
-/// (`protocol-v2.md` §1.3, §4.1 `candidates`, `keep_floor`, `keep_coverage`).
+/// (`seacast.md` §1.3, §4.1 `candidates`, `keep_floor`, `keep_coverage`).
 #[test]
 fn links_count_where_interest_holds_the_family() {
     let mut catalog = Catalog::new(8, 8);
@@ -1455,7 +1455,7 @@ fn links_count_where_interest_holds_the_family() {
 /// A sampler asks one peer for each sample and no peer for two: a link of
 /// ordinary custody first, a routed request where none is left, a peer of high
 /// custody only after the first wait. Its later asks are bounded in flight, and
-/// nothing of them is left behind (`protocol-v2.md` §4.10).
+/// nothing of them is left behind (`seacast.md` §4.10).
 #[test]
 fn a_sampler_asks_one_peer_for_each_sample() {
     let wants = |world: &mut World, peer| -> Vec<Want> {
@@ -1528,7 +1528,7 @@ fn a_sampler_asks_one_peer_for_each_sample() {
 /// on, to a link that serves the index, a bounded number of times per asking
 /// peer until the host starts a new period, and answers the asker when the
 /// chunk arrives. The same ask without `hops` is a violation
-/// (`protocol-v2.md` §4.5 `route_want`, X6).
+/// (`seacast.md` §4.5 `route_want`, X6).
 #[test]
 fn a_routed_request_is_passed_on_within_the_limit() {
     let mut catalog = Catalog::new(8, 8);
@@ -1592,7 +1592,7 @@ fn a_routed_request_is_passed_on_within_the_limit() {
 }
 
 /// A tie on a group the domain never tells of goes once its sender has stopped
-/// naming the group (`protocol.md` §4.2 `drop_stale_waits`).
+/// naming the group (`seacast-lite.md` §4.2 `drop_stale_waits`).
 #[test]
 fn a_tie_on_a_group_never_told_of_expires() {
     let mut catalog = Catalog::new(8, 8);
@@ -1613,7 +1613,7 @@ fn a_tie_on_a_group_never_told_of_expires() {
 
 /// A park is the node's, not the connection's: it returns on the node's next
 /// connection until its end, and the table that keeps it is bounded
-/// (`protocol.md` §8.1).
+/// (`seacast-lite.md` §8.1).
 #[test]
 fn a_park_outlives_its_connection() {
     let mut config = NodeConfig::default();
@@ -1776,7 +1776,7 @@ fn links_follow_the_joins() {
 }
 
 /// A link counts once our JOIN is queued, not while a full queue owes it
-/// (`protocol-v2.md` §4.1 `links`).
+/// (`seacast.md` §4.1 `links`).
 #[test]
 fn a_link_waits_for_our_owed_join() {
     let mut world = World::new(Catalog::new(8, 8), 1, InterestKind::All);
@@ -2015,8 +2015,43 @@ fn sets_of_peers_are_not_cut_at_a_length() {
     assert!(offers + 1 >= share && offers <= share, "{offers} of {share}");
 }
 
+/// Heartbeat gossip goes to `joined_peers()` (`seacast.md` §3), the links of a
+/// type the node runs. A peer whose JOIN is in is not one while ours is owed.
+#[test]
+fn heartbeat_gossip_goes_to_links_only() {
+    let config = NodeConfig { paced_gossip: false, ..NodeConfig::default() };
+    let mut world = World::with_config(config, Catalog::new(8, 8), 2, InterestKind::All);
+    // Peer 3: its queue full, so our answer to its JOIN is owed.
+    world.node.connect_peer(3, false, &mut world.env, &world.catalog);
+    let prune = Control::Prune(Prune {
+        object_type: TYPE,
+        family: 0,
+        colour: 0,
+        direction: Direction::Out,
+    });
+    while world.node.sends.send::<Vec<u8>, _>(3, Queued::Control(prune), false, &mut world.env) {}
+    assert!(world.node.sends.send_relation::<Vec<u8>, _>(3, prune, &mut world.env));
+    let mut rpc = Rpc::default();
+    let _ = rpc.joins.push(peer_join(InterestKind::All));
+    world.rpc(3, rpc);
+    assert!(!world.node.is_linked(3, TYPE));
+
+    world.rpc(1, chunk_rpc(chunk(group(1), 0, [0; 32])));
+    world.drain(2);
+    let offered = |world: &mut World, peer| {
+        world.drain(peer).iter().any(|e| e.haves.iter().any(|h| h.offer && h.bits.has(0)))
+    };
+    world.heartbeat();
+    assert!(offered(&mut world, 2));
+    // The drain writes our JOIN, and the next heartbeat takes the link.
+    assert!(!offered(&mut world, 3));
+    assert!(world.node.is_linked(3, TYPE));
+    world.heartbeat();
+    assert!(offered(&mut world, 3));
+}
+
 /// A dropped group's later chunks are not acted on: not forwarded, and not kept
-/// for heartbeat gossip (`protocol-v2.md` §4.6).
+/// for heartbeat gossip (`seacast.md` §4.6).
 #[test]
 fn a_dropped_group_is_not_acted_on() {
     let mut world = World::new(Catalog::new(8, 8), 2, InterestKind::All);
@@ -2034,7 +2069,7 @@ fn a_dropped_group_is_not_acted_on() {
 }
 
 /// A decode answers the standing WANTs of its own group, as an arrival does
-/// (`protocol-v2.md` §4.5).
+/// (`seacast.md` §4.5).
 #[test]
 fn a_decode_answers_the_standing_wants_of_its_group() {
     let mut world = World::new(Catalog::new(8, 4), 2, InterestKind::All);
@@ -2058,7 +2093,7 @@ fn a_decode_answers_the_standing_wants_of_its_group() {
 
 /// A claimant still decoding keeps the first probe an asker sends, and
 /// answers it once when the chunk is stored; a standing WANT of the same
-/// index from the asker is not kept beside it (`protocol-v2.md` §4.6).
+/// index from the asker is not kept beside it (`seacast.md` §4.6).
 #[test]
 fn a_probe_that_finds_its_claimant_decoding_is_answered_once_stored() {
     let mut world = World::new(Catalog::new(8, 4), 2, InterestKind::All);
@@ -2114,7 +2149,7 @@ fn the_probes_kept_while_decoding_are_bounded() {
 /// A node that keeps its decode for later and is told of a whole claim
 /// probes the claimant. The probe's promise starts at its write; a probe not
 /// written by the verdict gets none, and one whose claimant leaves gets none
-/// and returns the duty to its own time (`protocol-v2.md` §4.6).
+/// and returns the duty to its own time (`seacast.md` §4.6).
 #[test]
 fn a_probe_is_judged_only_once_written_and_while_its_claimant_stays() {
     #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2169,7 +2204,7 @@ fn a_probe_is_judged_only_once_written_and_while_its_claimant_stays() {
 }
 
 /// A pull-only type's source pushes nothing and offers every chunk at publish,
-/// one offer a peer over the colours (`protocol-v2.md` §4.7
+/// one offer a peer over the colours (`seacast.md` §4.7
 /// `offer_at_publish`).
 #[test]
 fn a_pull_only_source_offers_at_publish() {
@@ -2192,7 +2227,7 @@ fn a_pull_only_source_offers_at_publish() {
 }
 
 /// At `SOURCE_OFFERS = PUBLISH` the peers not pushed a chunk are offered it at
-/// publish, and an acknowledgement offers nothing more (`protocol-v2.md` §4.7).
+/// publish, and an acknowledgement offers nothing more (`seacast.md` §4.7).
 #[test]
 fn a_source_may_offer_at_publish() {
     let config =
@@ -2226,7 +2261,7 @@ fn a_source_may_offer_at_publish() {
 }
 
 /// A push is noted under every group the chunk fills, so that it is not
-/// offered or repaired to that peer through another axis (`protocol-v2.md`
+/// offered or repaired to that peer through another axis (`seacast.md`
 /// §4.4 `note_push`).
 #[test]
 fn a_push_is_noted_under_every_group_it_fills() {
@@ -2248,7 +2283,7 @@ fn a_push_is_noted_under_every_group_it_fills() {
 }
 
 /// The first unsolicited chunk of a group written to a peer is marked, for its
-/// type to send more with it (`protocol-v2-bindings.md` §1.3, P2): no later one
+/// type to send more with it (`seacast-bindings.md` §1.3, P2): no later one
 /// of the group to that peer, and no answer.
 #[test]
 fn the_first_push_of_a_group_to_a_peer_is_marked() {
@@ -2285,7 +2320,7 @@ fn the_first_push_of_a_group_to_a_peer_is_marked() {
 
 /// A second copy under an unseen id for an index already received on an axis
 /// is acknowledged there and not forwarded; one held only as rebuilt is still
-/// forwarded (`protocol-v2.md` §4.2, §4.4).
+/// forwarded (`seacast.md` §4.2, §4.4).
 #[test]
 fn a_second_id_for_a_received_index_is_not_forwarded() {
     let mut world = World::new(Catalog::new(4, 2), 3, InterestKind::All);
@@ -2343,7 +2378,7 @@ fn a_second_id_for_a_received_index_is_not_forwarded() {
 
 /// A writer mid-write keeps its place in the window's waiter line without
 /// stalling writers behind it, and `write_waits` wakes the next writer that can
-/// write only while room is free (`protocol-v2.md` §4.11, `protocol.md` §7.1).
+/// write only while room is free (`seacast.md` §4.11, `seacast-lite.md` §7.1).
 #[test]
 fn the_window_line_skips_a_writer_mid_write() {
     let config = NodeConfig { chunk_bytes: 32, ..NodeConfig::default() };

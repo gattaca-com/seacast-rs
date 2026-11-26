@@ -1,5 +1,5 @@
 //! The send path: a bounded two-lane queue a peer and the node-wide byte
-//! window (`protocol-v2.md` §4.11, §4.12; `protocol.md` §7). The node owns it
+//! window (`seacast.md` §4.11, §4.12; `seacast-lite.md` §7). The node owns it
 //! (`SeacastNode::sends`); each peer's writer calls
 //! [`SeacastNode::next_to_send`].
 
@@ -221,7 +221,7 @@ impl SendQueues {
     }
 
     /// Merges a holding of `h.group` into an existing urgent holding still
-    /// waiting in `peer`'s queue (`protocol-v2.md` §4.2 `merge_waiting`).
+    /// waiting in `peer`'s queue (`seacast.md` §4.2 `merge_waiting`).
     pub fn merge_waiting(&mut self, peer: PeerId, h: &Have) -> bool {
         let Some(q) = self.queue.get_mut(peer) else {
             return false;
@@ -278,14 +278,14 @@ impl SendQueues {
         self.owed_answers.drop_group(group);
     }
 
-    /// The first peer in the waiter line whose writer can write (`protocol.md`
-    /// §7.1 `front`).
+    /// The first peer in the waiter line whose writer can write
+    /// (`seacast-lite.md` §7.1 `front`).
     fn front<B: ChunkBuffer, E: RuntimeEnv<B>>(&self, env: &E) -> Option<PeerId> {
         self.waiters.iter().copied().find(|&q| !env.is_writing(q))
     }
 
     /// Wakes the first writer in line that can write, if the window has room
-    /// (`protocol-v2.md` §4.11 `wake_front`).
+    /// (`seacast.md` §4.11 `wake_front`).
     pub fn wake_front<B: ChunkBuffer, E: RuntimeEnv<B>>(&self, env: &mut E) {
         if self.in_flight >= self.config.window_bytes() {
             return;
@@ -295,7 +295,7 @@ impl SendQueues {
         }
     }
 
-    /// `peer`'s write has not completed (`protocol-v2.md` §4.11 `write_waits`):
+    /// `peer`'s write has not completed (`seacast.md` §4.11 `write_waits`):
     /// if `peer` is in the waiter line, wakes the first writer in line that can
     /// write, if the window has room.
     pub fn write_waits<B: ChunkBuffer, E: RuntimeEnv<B>>(&self, peer: PeerId, env: &mut E) {
@@ -305,7 +305,7 @@ impl SendQueues {
     }
 
     /// Attempts to acquire `need` bytes in the node-wide congestion window for
-    /// `peer`'s writer (`protocol-v2.md` §4.11 `acquire_room(p, need)`).
+    /// `peer`'s writer (`seacast.md` §4.11 `acquire_room(p, need)`).
     pub fn acquire_room<B: ChunkBuffer, E: RuntimeEnv<B>>(
         &mut self,
         peer: PeerId,
@@ -428,7 +428,7 @@ fn owe_single(owed: &mut PreallocDeque<GroupId>, group: GroupId) {
 }
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// `peer`'s writer has started to wait on its transport (`protocol-v2.md`
+    /// `peer`'s writer has started to wait on its transport (`seacast.md`
     /// §4.11 `write_waits`): if `peer` is in the window's waiter line, wakes
     /// the first writer in line that can write, if room is free.
     pub fn write_waits<E>(&self, peer: PeerId, env: &mut E)
@@ -439,7 +439,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Selects and filters the next queue entry to write to `peer`
-    /// (`protocol-v2.md` §4.11 `next_to_send`).
+    /// (`seacast.md` §4.11 `next_to_send`).
     pub fn next_to_send<E, C>(
         &mut self,
         peer: PeerId,
@@ -541,7 +541,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
     }
 
-    /// Chooses the index in `queue[peer].normal` to pop next (`protocol-v2.md`
+    /// Chooses the index in `queue[peer].normal` to pop next (`seacast.md`
     /// §4.12 `choose(q)`) with zero heap allocation.
     pub fn choose_normal_index(&self, peer: PeerId) -> usize {
         let Some(q) = self.sends.queue.get(peer) else {
@@ -564,7 +564,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Picks the rarest entry satisfying `pred` without heap allocation
-    /// (`protocol-v2.md` §4.12 `pick(q, ks)`).
+    /// (`seacast.md` §4.12 `pick(q, ks)`).
     fn pick_rarest_matching<F>(&self, q: &PeerQueue, mut pred: F) -> Option<usize>
     where
         F: FnMut(&Queued) -> bool,
@@ -591,7 +591,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Picks the rarest chunk ahead of the first control-only entry
-    /// (`protocol.md` §7.2 `rarest(q)` `[c9]`).
+    /// (`seacast-lite.md` §7.2 `rarest(q)` `[c9]`).
     pub fn rarest(&self, q: &PeerQueue) -> usize {
         let mut best_h = usize::MAX;
         let mut best_i = 0;
@@ -608,7 +608,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         best_i
     }
 
-    /// Attaches owed offers for `peer` to `entry` (`protocol.md` §7.2
+    /// Attaches owed offers for `peer` to `entry` (`seacast-lite.md` §7.2
     /// `with_owed`).
     pub fn with_owed(&mut self, peer: PeerId, mut entry: QueueEntry<B>) -> Option<QueueEntry<B>> {
         // Only as many groups as the entry has room for leave `owed`: the rest stay

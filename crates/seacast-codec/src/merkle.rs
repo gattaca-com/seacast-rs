@@ -2,7 +2,7 @@ use seacast_core::{Bytes32, InlineVec};
 
 use crate::sha256::{Sha256, sha256_pair, sha256_prefixed_many};
 
-/// Maximum Merkle proof depth (`List[Bytes32, 14]` in `protocol.md` §1–§2).
+/// Maximum Merkle proof depth (`List[Bytes32, 14]` in `seacast-lite.md` §1–§2).
 pub const MAX_PROOF_DEPTH: usize = 14;
 
 /// Maximum leaves supported by stack-allocated Merkle tree construction: a
@@ -13,7 +13,7 @@ pub const MAX_MERKLE_LEAVES: usize = seacast_core::MAX_BITMAP_BITS;
 pub type MerkleProof = InlineVec<Bytes32, MAX_PROOF_DEPTH>;
 
 /// Computes the domain-separated leaf digest `sha256(0x00 || data)`
-/// (`protocol.md` §1).
+/// (`seacast-lite.md` §1).
 #[inline]
 pub fn leaf_hash(data: &[u8]) -> Bytes32 {
     let mut h = Sha256::new();
@@ -23,7 +23,7 @@ pub fn leaf_hash(data: &[u8]) -> Bytes32 {
 }
 
 /// Computes the domain-separated internal node digest `sha256(0x01 || left ||
-/// right)` (`protocol.md` §1).
+/// right)` (`seacast-lite.md` §1).
 #[inline]
 pub fn node_hash(left: &Bytes32, right: &Bytes32) -> Bytes32 {
     sha256_pair(0x01, left, right)
@@ -110,14 +110,14 @@ impl MerkleTree {
     }
 }
 
-/// Computes the Merkle root and all tree layers over `leaves` (`protocol.md` §1
-/// `[c1]`).
+/// Computes the Merkle root and all tree layers over `leaves`
+/// (`seacast-lite.md` §1 `[c1]`).
 pub fn build_merkle_layers<T: AsRef<[u8]>>(leaves: &[T]) -> MerkleTree {
     MerkleTree::build(leaves)
 }
 
 /// Computes the Merkle root over `leaves` (`merkle_root(leaves)` in
-/// `protocol.md` §1).
+/// `seacast-lite.md` §1).
 pub fn merkle_root<T: AsRef<[u8]>>(leaves: &[T]) -> Bytes32 {
     MerkleTree::build(leaves).root()
 }
@@ -135,7 +135,7 @@ pub fn merkle_proof<T: AsRef<[u8]>>(leaves: &[T], index: usize) -> MerkleProof {
 }
 
 /// Verifies a chunk's Merkle proof against `root` (`verify_merkle_proof` in
-/// `protocol.md` §3).
+/// `seacast-lite.md` §3).
 pub fn verify_merkle_proof(
     root: &Bytes32,
     data: &[u8],

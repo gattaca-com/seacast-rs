@@ -6,7 +6,7 @@ The protocol logic is a single-threaded state machine with no I/O. A host suppli
 
 ## Where this differs from the specification
 
-This implements `seacast.md` of v0.12.0, with the rules it carries over from `seacast-lite.md`, and the gossipsub binding of `seacast-bindings.md` (§4) for the payload, in `seacast-gossipsub`. It differs from them as follows.
+This implements `seacast.md` of v0.13.0-rc.1, with the rules it carries over from `seacast-lite.md`, and the gossipsub binding of `seacast-bindings.md` (§4) for the payload, in `seacast-gossipsub`. The specification's later move of its reasons to `seacast-rationale.md` and `seacast-lite-rationale.md` changes no rule and no section number. It differs from them as follows. `seacast.md` §0 binds the definitions and what each message means, and leaves a node's scheduling and its release of a group as source to the node (§4.7, §4.9, §4.11 to §4.13): an item below that is in those parts only, such as the gathered offers at `SOURCE_OFFERS = PUBLISH` or the length the window counts for a chunk, is a choice the specification permits.
 
 - **Only the gossipsub binding is implemented, for the payload, and without gossipsub's protobuf.** `seacast-gossipsub` has the control strings, the payload's chunk, group key and message id, and the hand-over of a received `RPC` in parts. A client's gossipsub reads and writes the `RPC` itself. The libp2p stream, Waggle, partial-messages and native QUIC bindings are not implemented. The strings and ids of cell groups are open in the specification, and the sampler's rules on gossipsub's wires (`seacast-bindings.md` §6) are not implemented: no chunk is admitted on a topic the host has not subscribed to.
 - **The versions of the strings.** A holding and a WANT are written at version 4, an offer at version 1; the specification leaves open which version to write where every extra field has its default. A version 1 holding is read with `claim_all` and `complete` clear, where the specification reads them from a full bitmap. A version 1 `WantIndex` is read as a WANT with every extra field clear, which the specification leaves open.
@@ -53,7 +53,7 @@ This implements `seacast.md` of v0.12.0, with the rules it carries over from `se
 | `crates/seacast-core` | The state machine, `SeacastNode`: relations, chunk handling, push, pull, repair, the send window. No dependency but `fxhash`. |
 | `crates/seacast-codec` | What a segmented object type needs: segmentation, Snappy, Reed-Solomon over GF(2^8) and, past 256 chunks, GF(2^16), SHA-256, the Merkle tree. |
 | `crates/seacast-gossipsub` | The gossipsub binding: the control strings of IHAVE, IDONTWANT and IWANT (`is_seacast` tells them from a client's own entries), the payload's codec (its chunk, group key and message id; it reads a frame a host keeps cut at its data, `ChunkBytes::tail`) and catalog (`PayloadCatalog` over a `PayloadHost` that knows the blocks and over a codec, the payload's or a host's own built on it), a received `RPC` handed to the node in parts (`Inbound`) and a queue entry written to one (`write_entry`). No protobuf. |
-| `crates/seacast-sim` | Everything specific to the domain: the type ids (payload, column, row), the payload type's catalog, and a discrete-event simulator that runs the five settings of `protocol-v2.md` §6.2 and checks the protocol's invariants. |
+| `crates/seacast-sim` | Everything specific to the domain: the type ids (payload, column, row), the payload type's catalog, and a discrete-event simulator that runs the five settings of `seacast.md` §6.2 and checks the protocol's invariants. |
 
 ## The host's contract
 
@@ -109,7 +109,7 @@ Two entry points are for a host that keeps links and has periods of its own:
 - `SeacastNode::link_deficits(type, catalog, report)` reports each family in which the node has fewer links than a floor asks for, with the number missing. The host polls it, for example at its heartbeat, and opens the links. The floors are the relation floor (`F_LO` links per family with duty) and those of `Policy::link_floors`. `Policy::holds_family` says whether a peer's derived interest holds a family.
 - `SeacastNode::reset_period()` starts a new period of the limits the specification counts per slot: at present the routed requests passed on per peer (`FORWARD_LIMIT`).
 
-`NodeConfig::order_key` is a 32-byte secret the host draws at start. It orders the announcers beyond an ask's list by HMAC-SHA-256 (`protocol.md` §6.1).
+`NodeConfig::order_key` is a 32-byte secret the host draws at start. It orders the announcers beyond an ask's list by HMAC-SHA-256 (`seacast-lite.md` §6.1).
 
 ## An object's life
 
@@ -227,13 +227,13 @@ sequenceDiagram
 
 Asks for one offer leave as the bits of one WANT, so none is left behind however many indices it names. When every announcer of a chunk is parked, a last-resort timer asks one of them again, with a doubling wait. Nothing is asked for before its group can be authenticated.
 
-A sampler asks without an offer (`SeacastNode::sample`, `protocol-v2.md` §4.9). Each index goes in a WANT of its own, and no peer is asked for two samples of one scope. The first ask goes to a link whose interest holds the index, else as a routed request (`hops = ROUTE_HOPS`) to a forwarding link. After `SAMPLE_RETRY` without the chunk the peer is parked and another is asked, peers of high custody last, each waiting `SAMPLE_RETRY2`, with at most `SAMPLE_OUTSTANDING` asks of a scope in flight; the rest are held. When nobody is left the host is told through `RuntimeEnv::unreachable`.
+A sampler asks without an offer (`SeacastNode::sample`, `seacast.md` §4.9). Each index goes in a WANT of its own, and no peer is asked for two samples of one scope. The first ask goes to a link whose interest holds the index, else as a routed request (`hops = ROUTE_HOPS`) to a forwarding link. After `SAMPLE_RETRY` without the chunk the peer is parked and another is asked, peers of high custody last, each waiting `SAMPLE_RETRY2`, with at most `SAMPLE_OUTSTANDING` asks of a scope in flight; the rest are held. When nobody is left the host is told through `RuntimeEnv::unreachable`.
 
 A node with duty that cannot serve a routed request passes it one step on, to a link that serves the index, at most `FORWARD_LIMIT` times per asking peer and period. Beyond the limit it is silent. The answer returns through the standing ask.
 
 ## Sending
 
-The node queues what it sends (`SeacastNode::sends`, a `SendQueues`): the queue and window of `protocol-v2.md` §4.11 and §4.12. A queued item is small: a chunk's key `(group, index)` or one control message. Each peer has a queue with two lanes: urgent (holdings, joins) and normal (chunks, offers, asks, relation control). `RuntimeEnv::wake_writer(peer)` tells the host that a peer has something to write; the host then calls `SeacastNode::next_to_send(peer)` until it gives nothing. The entry that goes on the wire is built when it is taken, so what is no longer to be sent is dropped then and an ask's promise starts then.
+The node queues what it sends (`SeacastNode::sends`, a `SendQueues`): the queue and window of `seacast.md` §4.11 and §4.12. A queued item is small: a chunk's key `(group, index)` or one control message. Each peer has a queue with two lanes: urgent (holdings, joins) and normal (chunks, offers, asks, relation control). `RuntimeEnv::wake_writer(peer)` tells the host that a peer has something to write; the host then calls `SeacastNode::next_to_send(peer)` until it gives nothing. The entry that goes on the wire is built when it is taken, so what is no longer to be sent is dropped then and an ask's promise starts then.
 
 ```mermaid
 flowchart TB
@@ -364,7 +364,7 @@ A full table refuses a new key instead of failing, and state a peer can make the
 cargo test                                         # unit, limit and simulation tests
 just fmt                                           # rustfmt, on the pinned nightly
 just clippy                                        # clippy, warnings denied
-cargo run --release -p seacast-sim                 # the five settings of protocol-v2.md §6.2
+cargo run --release -p seacast-sim                 # the five settings of seacast.md §6.2
 cargo run --release -p seacast-codec --example bench   # timings of the codec's hot paths
 ```
 

@@ -4,11 +4,11 @@ use crate::bitmap::Bitmap;
 /// spec).
 pub type Bytes32 = [u8; 32];
 
-/// 59-byte structured chunk ID (`protocol-v2-bindings.md` §1.3): `group (35B:
+/// 59-byte structured chunk ID (`seacast-bindings.md` §1.3): `group (35B:
 /// type, key, index LE) || index (4B LE) || content (20B)`.
 pub type ChunkId = [u8; 59];
 
-/// Group identifier in diffusion (`protocol-v2-bindings.md` §1.3): its object
+/// Group identifier in diffusion (`seacast-bindings.md` §1.3): its object
 /// type, a key, and an index under the key, such as a block root and a column.
 /// The type's codec derives it from a chunk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -60,26 +60,26 @@ impl GenerationPeerId {
     }
 }
 
-/// 32-byte cryptographic node identifier (`node_id(p)` in `protocol-v2.md`).
+/// 32-byte cryptographic node identifier (`node_id(p)` in `seacast.md`).
 pub type NodeId = Bytes32;
 
 /// Object type identifier. The domain assigns the values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct TypeId(pub u8);
 
-/// The fork at which a node runs a type (`protocol-v2-bindings.md` §1.3).
+/// The fork at which a node runs a type (`seacast-bindings.md` §1.3).
 pub type ForkDigest = [u8; 4];
 
 /// Relation family key within a type (`Policy::family`).
 pub type FamilyId = u16;
 
-/// Colour index (`0..M[T]`, `protocol-v2.md` §1.4).
+/// Colour index (`0..M[T]`, `seacast.md` §1.4).
 pub type Colour = u16;
 
-/// Monotonic timestamp in seconds (`now` in `protocol.md` / `protocol-v2.md`).
+/// Monotonic timestamp in seconds (`now` in `seacast-lite.md` / `seacast.md`).
 pub type Timestamp = f64;
 
-/// Interest kind declared per link and object type at `JOIN` (`protocol-v2.md`
+/// Interest kind declared per link and object type at `JOIN` (`seacast.md`
 /// §1.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum InterestKind {
@@ -94,7 +94,7 @@ pub enum InterestKind {
     Declared,
 }
 
-/// Duty declared per link and object type at `JOIN` (`protocol-v2.md` §1.2).
+/// Duty declared per link and object type at `JOIN` (`seacast.md` §1.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Duty {
     /// Holds push and announce relations and forwards received chunks into
@@ -105,7 +105,7 @@ pub enum Duty {
     None,
 }
 
-/// Direction of a `Graft` or `Prune` message (`protocol-v2.md` §2).
+/// Direction of a `Graft` or `Prune` message (`seacast.md` §2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Direction {
     /// `"I will push you this colour"` (`OUT`).
@@ -129,7 +129,7 @@ impl Direction {
     }
 }
 
-/// Announce width beyond the push/in relation (`protocol-v2.md` §1.1
+/// Announce width beyond the push/in relation (`seacast.md` §1.1
 /// `ANNOUNCE_EXTRA`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AnnounceWidth {
@@ -144,7 +144,7 @@ pub enum AnnounceWidth {
 }
 
 /// When a source offers each chunk to the pool's peers it did not push it to
-/// (`SOURCE_OFFERS`, `protocol-v2.md` §4.7).
+/// (`SOURCE_OFFERS`, `seacast.md` §4.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SourceOffers {
     /// At the chunk's acknowledgement; the holding names the chunks
@@ -155,14 +155,14 @@ pub enum SourceOffers {
     Publish,
 }
 
-/// Node uplink bandwidth class (`protocol-v2.md` §4.1, `[c17]`).
+/// Node uplink bandwidth class (`seacast.md` §4.1, `[c17]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UplinkClass {
     Home,
     Fast,
 }
 
-/// Level 1 per-chunk validation outcome (`protocol.md` §3, `protocol-v2.md`
+/// Level 1 per-chunk validation outcome (`seacast-lite.md` §3, `seacast.md`
 /// §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValidationResult {
@@ -185,7 +185,7 @@ pub struct Shape {
     pub k: u32,
 }
 
-/// Lifecycle state of a tracked group (`protocol.md` §4.2, `protocol-v2.md`
+/// Lifecycle state of a tracked group (`seacast-lite.md` §4.2, `seacast.md`
 /// §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GroupState {
@@ -195,7 +195,7 @@ pub enum GroupState {
     Invalid,
 }
 
-/// Verdict of IncrementalDAS repair sampling (`protocol-v2.md` §4.6
+/// Verdict of IncrementalDAS repair sampling (`seacast.md` §4.6
 /// `repair_verdict`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RepairVerdict {
@@ -220,7 +220,7 @@ impl Ask {
 }
 
 /// Links a node is to keep to peers whose interest holds `family`, beyond the
-/// relation floor: a repair, source or coverage floor (`protocol-v2.md` §1.3,
+/// relation floor: a repair, source or coverage floor (`seacast.md` §1.3,
 /// §4.6, §4.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LinkFloor {
@@ -231,7 +231,7 @@ pub struct LinkFloor {
     pub diverse: bool,
 }
 
-/// Per-object-type protocol parameters (`protocol-v2.md` §1.1 `TypeParams`,
+/// Per-object-type protocol parameters (`seacast.md` §1.1 `TypeParams`,
 /// §6.3).
 #[derive(Debug, Clone)]
 pub struct TypeParams {
@@ -296,7 +296,7 @@ pub struct TypeParams {
     pub max_relations: usize,
     /// Seconds an offer's promise runs before a broken one parks the peer for
     /// the group (`PROMISE = 0.400s`, `[c5]`; per object type,
-    /// `protocol-v2.md` §6.3).
+    /// `seacast.md` §6.3).
     pub promise: f64,
     /// Optional IncrementalDAS repair sampling steps `[(S_1, L_1), (S_2, L_2),
     /// ...]` (`REPAIR_SAMPLE`, `R5`).
@@ -319,7 +319,7 @@ pub struct TypeParams {
 }
 
 impl Default for TypeParams {
-    /// Tier 4 parameters (`protocol-v2.md` §6.1).
+    /// Tier 4 parameters (`seacast.md` §6.1).
     fn default() -> Self {
         Self {
             m: 1,
@@ -354,8 +354,8 @@ impl Default for TypeParams {
     }
 }
 
-/// Node-wide protocol configuration and card switches (`protocol.md` §8.3,
-/// `protocol-v2.md` §6.3).
+/// Node-wide protocol configuration and card switches (`seacast-lite.md` §8.3,
+/// `seacast.md` §6.3).
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
     /// Base push degree (`R = 2` with erasure coding, `3` uncoded).
@@ -401,7 +401,7 @@ pub struct NodeConfig {
     /// Heartbeat period in seconds (`HEARTBEAT = 0.700s`).
     pub heartbeat: f64,
     /// Secret of this node's HMAC-SHA-256 order of the announcers beyond an
-    /// ask's list, drawn by the host at start and never sent (`protocol.md`
+    /// ask's list, drawn by the host at start and never sent (`seacast-lite.md`
     /// §6.1).
     pub order_key: Bytes32,
     /// Minimum non-related gossip peers (`D_LAZY = 6`).
@@ -637,8 +637,8 @@ impl Default for NodeConfig {
 }
 
 impl NodeConfig {
-    /// Effective per-chunk push budget for this node (`R_NODE` in `protocol.md`
-    /// §5.2 `[c17]`).
+    /// Effective per-chunk push budget for this node (`R_NODE` in
+    /// `seacast-lite.md` §5.2 `[c17]`).
     #[inline]
     pub fn r_node(&self) -> usize {
         if self.card17_enabled && self.uplink_bps >= self.fast_uplink_bps {
@@ -658,20 +658,20 @@ impl NodeConfig {
         }
     }
 
-    /// Ask window scaling factor (`ask_scale()` in `protocol-v2.md` §4.13).
+    /// Ask window scaling factor (`ask_scale()` in `seacast.md` §4.13).
     #[inline]
     pub fn ask_scale(&self) -> f64 {
         (self.ask_uplink_bps / self.uplink_bps).max(1.0)
     }
 
     /// Effective ask window in seconds (`IWANT_WINDOW * ask_scale()`,
-    /// `protocol-v2.md` §4.13).
+    /// `seacast.md` §4.13).
     #[inline]
     pub fn scaled_iwant_window(&self) -> f64 {
         self.iwant_window * self.ask_scale()
     }
 
-    /// Node-wide congestion window in slots (`W` in `protocol.md` §7.1
+    /// Node-wide congestion window in slots (`W` in `seacast-lite.md` §7.1
     /// `[c14]`).
     #[inline]
     pub fn window_slots(&self) -> usize {
@@ -686,7 +686,7 @@ impl NodeConfig {
     }
 
     /// Node-wide congestion window in bytes (`W_BYTES = W * CHUNK_BYTES` in
-    /// `protocol-v2.md` §4.11 `[c14, X3]`).
+    /// `seacast.md` §4.11 `[c14, X3]`).
     #[inline]
     pub fn window_bytes(&self) -> usize {
         if !self.window_enabled {
@@ -697,7 +697,7 @@ impl NodeConfig {
 }
 
 /// Entry in `peer_has[p][g]` tracking a peer's holdings and claims
-/// (`protocol-v2.md` §3, §4.3).
+/// (`seacast.md` §3, §4.3).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct HaveEntry {
     pub bits: Bitmap,
@@ -714,7 +714,7 @@ impl HaveEntry {
 }
 
 /// Entry in `pushed[p][g]` tracking chunks chosen for push to a peer
-/// (`protocol.md` §5.2, §5.3).
+/// (`seacast-lite.md` §5.2, §5.3).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PushEntry {
     pub bits: Bitmap,

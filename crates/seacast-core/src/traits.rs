@@ -173,10 +173,10 @@ pub enum TimerEvent {
 /// Reason a peer was penalised by the protocol (`penalise(p)` in the spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PenaltyReason {
-    /// Chunk failed Level 1 authenticity check (`protocol.md` §3, §4.2).
+    /// Chunk failed Level 1 authenticity check (`seacast-lite.md` §3, §4.2).
     InvalidChunkLevel1,
     /// `Have` bitmap exceeded `MAX_HAVE_BYTES` or had bits `>= N`
-    /// (`protocol.md` §4.3, §8.2).
+    /// (`seacast-lite.md` §4.3, §8.2).
     InvalidHaveBitmap,
     /// Peer sent an ask for a chunk it already claimed in `peer_has`
     /// (`seacast-lite.md` §4.5).
@@ -187,7 +187,7 @@ pub enum PenaltyReason {
 }
 
 /// Pluggable bounded store for deferred chunks waiting for the domain's word on
-/// their group (`protocol.md` §4.2, §8.2).
+/// their group (`seacast-lite.md` §4.2, §8.2).
 pub trait DeferredStore<B> {
     /// Attempts to reserve space for a deferred chunk from `peer`.
     fn reserve(&mut self, peer: PeerId, chunk: &ChunkMsg<B>) -> bool;
@@ -275,7 +275,7 @@ pub trait RuntimeEnv<B: ChunkBuffer> {
     fn wake_writer(&mut self, _peer: PeerId) {}
 
     /// Whether `peer`'s writer has an unfinished write on its transport
-    /// (`protocol.md` §7.1 `writing(p)`, `protocol-v2.md` §4.11). While true,
+    /// (`seacast-lite.md` §7.1 `writing(p)`, `seacast.md` §4.11). While true,
     /// the window's waiter line passes `peer` over without taking its place.
     fn is_writing(&self, _peer: PeerId) -> bool {
         false
@@ -388,7 +388,7 @@ pub trait Domain {
 
     /// The id under which a peer is asked for at most one sample: that of the
     /// object the group is part of, where a node samples several groups of
-    /// one object (`protocol-v2.md` §4.10 `sampled_from`, I6).
+    /// one object (`seacast.md` §4.10 `sampled_from`, I6).
     fn sample_scope(&self, group: &GroupId) -> GroupId {
         *group
     }
@@ -450,7 +450,7 @@ pub trait Policy {
     }
 
     /// Whether a peer's `DERIVED` interest holds every index of the groups of
-    /// `family` (`protocol-v2.md` §1.3 `link_cover`).
+    /// `family` (`seacast.md` §1.3 `link_cover`).
     fn holds_family(
         &self,
         _t: TypeId,
@@ -463,14 +463,14 @@ pub trait Policy {
     }
 
     /// Whether a peer counts as one of high custody in a floor that asks for
-    /// diversity (`protocol-v2.md` §1.3). The base custody count is the
+    /// diversity (`seacast.md` §1.3). The base custody count is the
     /// domain's, so the default knows only interest `ALL`.
     fn high_custody(&self, _t: TypeId, join: &Join) -> bool {
         join.interest == InterestKind::All
     }
 
     /// The link floors of `t` beyond the relation floor: the repair, source
-    /// and coverage floors this node keeps (`protocol-v2.md` §1.3, §4.6,
+    /// and coverage floors this node keeps (`seacast.md` §1.3, §4.6,
     /// §4.7). Read by `SeacastNode::link_deficits`.
     fn link_floors(&self, _t: TypeId) -> InlineVec<LinkFloor, MAX_CHUNKS> {
         InlineVec::new()

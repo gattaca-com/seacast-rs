@@ -3,14 +3,14 @@ use std::{
     ops::{BitAnd, BitOr, BitOrAssign, Not},
 };
 
-/// Maximum number of chunks in a coded group (`protocol.md` §1 `[c6]`).
+/// Maximum number of chunks in a coded group (`seacast-lite.md` §1 `[c6]`).
 pub const MAX_CHUNKS: usize = 256;
 
 /// Number of `u64` words in a stack-allocated [`Bitmap`]: the indices a group
-/// may have, 64 a word. `protocol.md` §8.3 allows 8192 (`MAX_PLAIN_CHUNKS`);
-/// every table, message and queue item that holds a bitmap grows with this, so
-/// it is set to what an object of 10 MiB needs, and a group or an index past it
-/// is refused.
+/// may have, 64 a word. `seacast-lite.md` §8.3 allows 8192
+/// (`MAX_PLAIN_CHUNKS`); every table, message and queue item that holds a
+/// bitmap grows with this, so it is set to what an object of 10 MiB needs, and
+/// a group or an index past it is refused.
 pub const BITMAP_WORDS: usize = 16;
 
 /// Maximum bit index representable explicitly in [`Bitmap`].
@@ -21,7 +21,7 @@ pub const MAX_HAVE_BYTES: usize = BITMAP_WORDS * 8;
 
 /// A fixed-size, stack-allocated (`Copy`) chunk index bitmap with support for
 /// complemented (all-ones / `EVERY_INDEX`) representations, matching the
-/// two's-complement bitset semantics of `protocol-v2.md` with **zero heap
+/// two's-complement bitset semantics of `seacast.md` with **zero heap
 /// allocation**.
 ///
 /// - When `inverted == false`, `words` stores the set bits (`0` beyond
@@ -44,10 +44,10 @@ impl Default for Bitmap {
 }
 
 impl Bitmap {
-    /// Empty bitmap (`EMPTY` in `protocol-v2.md`).
+    /// Empty bitmap (`EMPTY` in `seacast.md`).
     pub const EMPTY: Self = Self { inverted: false, words: [0u64; BITMAP_WORDS] };
 
-    /// Infinite all-ones bitmap (`EVERY_INDEX` in `protocol-v2.md`).
+    /// Infinite all-ones bitmap (`EVERY_INDEX` in `seacast.md`).
     pub const EVERY_INDEX: Self = Self { inverted: true, words: [0u64; BITMAP_WORDS] };
 
     /// The representation: whether the words hold the cleared bits, and the
@@ -74,7 +74,8 @@ impl Bitmap {
         Self::EMPTY
     }
 
-    /// Creates a bitmap with bits `0..n` set (`all_bits(n)` in `protocol.md`).
+    /// Creates a bitmap with bits `0..n` set (`all_bits(n)` in
+    /// `seacast-lite.md`).
     #[inline]
     pub fn all_bits(n: u32) -> Self {
         let n = (n as usize).min(MAX_BITMAP_BITS);
@@ -96,7 +97,7 @@ impl Bitmap {
     }
 
     /// Creates a bitmap with a single index set (`bitmap({i})` in
-    /// `protocol.md`).
+    /// `seacast-lite.md`).
     #[inline]
     pub fn singleton(index: u32) -> Self {
         let mut b = Self::EMPTY;
@@ -137,7 +138,7 @@ impl Bitmap {
         true
     }
 
-    /// Returns `true` if `index` is set (`has(bits, i)` in `protocol.md`).
+    /// Returns `true` if `index` is set (`has(bits, i)` in `seacast-lite.md`).
     #[inline]
     pub const fn has(&self, index: u32) -> bool {
         let word_idx = (index as usize) / 64;
@@ -178,7 +179,7 @@ impl Bitmap {
         }
     }
 
-    /// Returns the number of set bits (`popcount(bits)` in `protocol.md`).
+    /// Returns the number of set bits (`popcount(bits)` in `seacast-lite.md`).
     /// Panics if called on an unbounded complemented bitmap (`EVERY_INDEX`).
     #[inline]
     pub const fn popcount(&self) -> u32 {

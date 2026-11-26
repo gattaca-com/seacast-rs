@@ -13,7 +13,7 @@ use crate::{
 
 impl<B: ChunkBuffer> SeacastNode<B> {
     /// Handles an arriving holding (`Have` with `offer = false`,
-    /// `protocol-v2.md` §4.3 `on_holding`).
+    /// `seacast.md` §4.3 `on_holding`).
     pub fn on_holding<E, C, R>(
         &mut self,
         peer: PeerId,
@@ -75,7 +75,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// The claimant's own copy of the probed index, first or a duplicate,
-    /// passes the probe and keeps its promise (`protocol-v2.md` §4.6
+    /// passes the probe and keeps its promise (`seacast.md` §4.6
     /// `probe_answer`).
     pub(crate) fn probe_answer(&mut self, group: GroupId, index: u32, sender: PeerId) {
         let Some(rec) = self.groups.get_mut(&group) else {
@@ -90,7 +90,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// The probe's verdict, once, or none. Settled, the probe's ask is gated
     /// again: the probed cell is pulled past stop-pull no more
-    /// (`protocol-v2.md` §4.6 `settle_probe`).
+    /// (`seacast.md` §4.6 `settle_probe`).
     pub(crate) fn settle_probe(&mut self, group: GroupId, verdict: Option<bool>) {
         let Some(rec) = self.groups.get_mut(&group) else {
             return;
@@ -173,7 +173,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         known
     }
 
-    /// Member check (`protocol-v2.md` §4.6 `owed_missing(g)`, `R5`):
+    /// Member check (`seacast.md` §4.6 `owed_missing(g)`, `R5`):
     /// Returns `true` if a chunk of `group` that belongs to our own interest on
     /// the cross axis is still missing from our holdings.
     pub fn owed_missing<C>(&self, group: &GroupId, catalog: &C) -> bool
@@ -333,7 +333,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         true
     }
 
-    /// Evaluates a delayed decode duty when its timer fires (`protocol-v2.md`
+    /// Evaluates a delayed decode duty when its timer fires (`seacast.md`
     /// §4.6 `reconsider`).
     pub fn reconsider<E, C, R>(
         &mut self,
@@ -478,7 +478,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         let n = h.n;
         let mine = self.groups.bits(&group, GroupBits::Mine).unwrap_or(Bitmap::EMPTY);
         // An index we lack, at random: the claimant cannot tell which
-        // (`protocol-v2.md` §4.6 `defer_on_claim`).
+        // (`seacast.md` §4.6 `defer_on_claim`).
         let lacked = (0..n).filter(|&i| !mine.has(i)).count();
         if lacked == 0 {
             return;
@@ -541,7 +541,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Pushes or offers rebuilt chunks across each group they fill
-    /// (`protocol-v2.md` §4.6 `push_rebuilt`) with zero heap allocation.
+    /// (`seacast.md` §4.6 `push_rebuilt`) with zero heap allocation.
     pub fn push_rebuilt<E, C, R>(
         &mut self,
         group: GroupId,
@@ -651,7 +651,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Pushes each rebuilt chunk to `R_NODE` peers lacking it and offers it to
-    /// the rest (`protocol-v2.md` §4.6 `push_rebuilt_as_source`,
+    /// the rest (`seacast.md` §4.6 `push_rebuilt_as_source`,
     /// `REPAIR_BUDGET`).
     #[allow(clippy::too_many_arguments)]
     fn push_rebuilt_as_source<E, C, R>(
@@ -744,7 +744,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Declares a sample of `group`: every index of `bits` at once, one peer
-    /// each (`protocol-v2.md` §4.10 `sample(g, bits)`, the first phase).
+    /// each (`seacast.md` §4.10 `sample(g, bits)`, the first phase).
     pub fn sample<E, C, R>(
         &mut self,
         group: GroupId,
@@ -862,7 +862,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// The wait on `peer` ran out: a sample still missing goes to another
     /// peer, with the short wait, and the asks held back take the place freed
-    /// (`protocol-v2.md` §4.10 `resample`, the second phase).
+    /// (`seacast.md` §4.10 `resample`, the second phase).
     ///
     /// The asks held back are taken also when this group has expired: they may
     /// be of another group of the scope.

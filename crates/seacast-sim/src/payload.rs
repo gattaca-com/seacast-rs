@@ -1,4 +1,4 @@
-//! The payload object type (`protocol-v2.md` §1.1, the column "payload (v0.3)")
+//! The payload object type (`seacast.md` §1.1, the column "payload (v0.3)")
 //! as the catalog a `SeacastNode` is driven with: the codec is
 //! [`SegmentedCodec`], the [`Domain`] is the host's ([`PayloadHost`]: whether a
 //! context commits a descriptor), and the [`Policy`] is one type
@@ -127,7 +127,7 @@ impl<Host: PayloadHost, Pool, B> Policy for PayloadCatalog<Host, Pool, B> {
     }
 
     /// A hash of the chunk and the peer, the same at every node (`tiebreak(f,
-    /// p)`, `protocol.md` §5.3).
+    /// p)`, `seacast-lite.md` §5.3).
     fn tiebreak(&self, chunk_id: &ChunkId, peer: PeerId) -> u64 {
         let mut h = Sha256::new();
         h.update(chunk_id);

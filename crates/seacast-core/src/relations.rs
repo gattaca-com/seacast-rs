@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// Handles a `Join` from `peer` (`protocol-v2.md` §4.1 `on_join`).
+    /// Handles a `Join` from `peer` (`seacast.md` §4.1 `on_join`).
     pub fn on_join<E, C>(&mut self, peer: PeerId, join: Join, env: &mut E, catalog: &C)
     where
         E: RuntimeEnv<B>,
@@ -90,7 +90,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         C: ObjectCatalog<B>,
         R: RngSource,
     {
-        // A node without duty for the type holds no relations (`protocol-v2.md` §1.2).
+        // A node without duty for the type holds no relations (`seacast.md` §1.2).
         if catalog.our_join(t).duty != Duty::Forward || catalog.params(t).host_relations {
             return;
         }
@@ -226,7 +226,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Handles an incoming `Graft`: each direction is answered, and one that is
-    /// the yes to ours, or crossed it, is not (`protocol-v2.md` §4.1
+    /// the yes to ours, or crossed it, is not (`seacast.md` §4.1
     /// `on_graft`, `[D10]`).
     pub fn on_graft<E, C>(&mut self, peer: PeerId, gr: Graft, env: &mut E, catalog: &C)
     where
@@ -337,7 +337,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Handles an incoming `Prune`: the peer's no, or its end of the relation.
     /// Ours ends too, with our GRAFT for it still unanswered, and is not
-    /// grafted again before the backoff has run (`protocol-v2.md` §4.1
+    /// grafted again before the backoff has run (`seacast.md` §4.1
     /// `on_prune`).
     ///
     /// The backoff is kept only for a relation this node held or had asked
@@ -418,7 +418,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Announces stored chunks when a peer joins our out-relation
-    /// (`protocol.md` §5.4 `on_mesh_join`).
+    /// (`seacast-lite.md` §5.4 `on_mesh_join`).
     pub fn on_relation_join<E, C>(
         &mut self,
         peer: PeerId,
@@ -460,16 +460,6 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 self.announce(peer, g, bits, env, catalog);
             }
         }
-    }
-
-    /// Proposes the least-used colour for `(t, fam)` (`propose_colour(T,
-    /// fam)`).
-    pub fn propose_colour<C>(&self, t: TypeId, fam: FamilyId, catalog: &C) -> Colour
-    where
-        C: ObjectCatalog<B>,
-    {
-        let m = catalog.params(t).m.max(1);
-        (0..m).min_by_key(|&c| self.count(self.in_pushers(t, fam, c))).unwrap_or(0)
     }
 
     /// Returns all peers that have completed a bidirectional `Join` for `t`
@@ -571,7 +561,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Whether `peer`'s interest holds every index of the groups of `fam`
-    /// (`protocol-v2.md` §1.3 `link_cover`).
+    /// (`seacast.md` §1.3 `link_cover`).
     pub(crate) fn link_covers<C>(&self, peer: PeerId, t: TypeId, fam: FamilyId, catalog: &C) -> bool
     where
         C: ObjectCatalog<B>,
@@ -737,7 +727,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Reports each family of `t` in which this node has fewer links than a
     /// floor asks for, with the number missing: the relation floor's `F_LO`
-    /// links per family it has duty in (`protocol-v2.md` §4.1 `keep_floor`),
+    /// links per family it has duty in (`seacast.md` §4.1 `keep_floor`),
     /// and the policy's floors (`Policy::link_floors`, as `keep_coverage`
     /// counts them). A link counts where its peer's interest holds the family.
     ///

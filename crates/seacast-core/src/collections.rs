@@ -13,7 +13,7 @@ use crate::types::{GenerationPeerId, PeerId};
 pub const MAX_INLINE_PEERS: usize = 64;
 
 /// Maximum offers tracked per `(group, index)` ask (`MAX_OFFERS_PER_ASK` in
-/// `protocol.md` §8.1).
+/// `seacast-lite.md` §8.1).
 pub const MAX_INLINE_OFFERS: usize = 16;
 
 /// Maximum colours per family in inline lists.
@@ -555,7 +555,7 @@ impl<T: fmt::Debug> fmt::Debug for PreallocDeque<T> {
 /// the hash is not seeded.
 ///
 /// A full map refuses a new key: what a peer sends decides how many keys are
-/// asked for, so running out is a limit reached (`protocol.md` §8.2), not a
+/// asked for, so running out is a limit reached (`seacast-lite.md` §8.2), not a
 /// broken invariant.
 #[derive(Clone)]
 pub struct PreallocMap<K, V> {

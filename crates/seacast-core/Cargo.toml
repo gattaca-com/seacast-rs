@@ -3,7 +3,7 @@ name = "seacast-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Standalone sans-io state machine and pluggable traits for SEACAST v2"
+description = "Standalone sans-io state machine and pluggable traits for SEACAST"
 
 [dependencies]
 fxhash = "0.2"

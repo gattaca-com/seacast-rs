@@ -1,7 +1,7 @@
 //! # `seacast-codec`
 //!
 //! Cryptographic, erasure-coding and segmentation implementations for
-//! **SEACAST v2**. A binding's bytes are its crate's (`seacast-gossipsub`).
+//! **SEACAST**. A binding's bytes are its crate's (`seacast-gossipsub`).
 
 pub mod buffer;
 pub mod layout;

@@ -9,8 +9,8 @@ use crate::{
 };
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// Handles an arriving offer (`Have` with `offer = true`, `protocol-v2.md`
-    /// §4.3 `on_offer` + `protocol.md` §4.4).
+    /// Handles an arriving offer (`Have` with `offer = true`, `seacast.md`
+    /// §4.3 `on_offer` + `seacast-lite.md` §4.4).
     pub fn on_offer<E, C, R>(
         &mut self,
         peer: PeerId,
@@ -29,7 +29,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             return InlineVec::new();
         }
         // An offer is a HAVE bitmap: one naming an index the group does not have is
-        // ignored and counts against its sender (`protocol.md` §8.2).
+        // ignored and counts against its sender (`seacast-lite.md` §8.2).
         if !self.valid_have(h, catalog) {
             env.penalise(peer, PenaltyReason::InvalidHaveBitmap);
             return InlineVec::new();
@@ -56,7 +56,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         let known_at = *self.groups.rec(g).known_at.get_or_insert(now);
 
         // Over the IHAVE limits the offer is recorded and nothing is done per index:
-        // what it lets the node ask for is the next heartbeat's (`protocol.md`
+        // what it lets the node ask for is the next heartbeat's (`seacast-lite.md`
         // §4.4).
         if self.over_ihave_limits(peer) {
             let mine = self.groups.bits(&g, GroupBits::Mine);
@@ -113,7 +113,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Records offers arriving before `START_DELAY` and schedules their first
-    /// retry after the delay (`protocol-v2.md` §4.3 `deferred_offers`,
+    /// retry after the delay (`seacast.md` §4.3 `deferred_offers`,
     /// `[D8]`).
     fn deferred_offers<E>(
         &mut self,
@@ -542,7 +542,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Answers the probes kept for `(group, index)`, now stored, received or
     /// rebuilt, as `on_want` answers a probe, with its one exemption
-    /// (`protocol-v2.md` §4.6 `serve_waiting_probe`).
+    /// (`seacast.md` §4.6 `serve_waiting_probe`).
     pub fn serve_waiting_probe<E, C>(
         &mut self,
         group: GroupId,
@@ -594,8 +594,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         offered_us || in_interest || claimed_all
     }
 
-    /// Checks if an ask for `a` may be sent now (`protocol.md` §6.1 `may_ask(a,
-    /// p)` `[c5]`).
+    /// Checks if an ask for `a` may be sent now (`seacast-lite.md` §6.1
+    /// `may_ask(a, p)` `[c5]`).
     pub fn may_ask<E>(&mut self, ask: Ask, peer: PeerId, env: &mut E) -> bool
     where
         E: RuntimeEnv<B>,
@@ -624,7 +624,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         true
     }
 
-    /// Retries an ask after `IWANT_WINDOW` closes (`protocol.md` §6.1
+    /// Retries an ask after `IWANT_WINDOW` closes (`seacast-lite.md` §6.1
     /// `retry_offer(a)`).
     pub fn retry_offer<E, C>(&mut self, ask: Ask, env: &mut E, catalog: &C)
     where
@@ -641,7 +641,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         {
             return;
         }
-        // Nothing is asked for before it can be authenticated (`protocol-v2.md` §4.2):
+        // Nothing is asked for before it can be authenticated (`seacast.md` §4.2):
         // the offers wait in the ledger, and the gate's opening retries them.
         if !catalog.authenticable(&ask.group) {
             return;
@@ -674,7 +674,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.promises.contains(ask, peer) || self.sends.ask_waiting(peer, ask)
     }
 
-    /// Records `peer`'s offer of `ask` (`protocol.md` §6.1 `add_offer(a, p)`).
+    /// Records `peer`'s offer of `ask` (`seacast-lite.md` §6.1 `add_offer(a,
+    /// p)`).
     pub fn add_offer(&mut self, ask: Ask, peer: PeerId, now: Timestamp) {
         let key = (peer, ask.group);
         let mut offered = self.pairs.offered(&key).unwrap_or_default();
@@ -701,7 +702,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Drops `peer`'s offers and queued/promised asks of `(group, index)`
-    /// (`drop_offer` in `protocol.md` §6.1).
+    /// (`drop_offer` in `seacast-lite.md` §6.1).
     pub fn drop_offer(&mut self, group: GroupId, index: u32, peer: PeerId) {
         self.drop_offers(group, &Bitmap::singleton(index), peer);
     }
@@ -745,7 +746,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Where `q` stands among the announcers of `ask`, smaller first: the offer
     /// list in its order, then the others by HMAC-SHA-256 of the ask and peer
-    /// under `NodeConfig::order_key`, larger first (`protocol.md` §6.1).
+    /// under `NodeConfig::order_key`, larger first (`seacast-lite.md` §6.1).
     fn announcer_rank(&self, ask: Ask, q: PeerId) -> (u64, u64, u64) {
         let listed = self.offers.get(&ask).and_then(|list| list.iter().position(|&p| p == q));
         match listed {
@@ -782,8 +783,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         })
     }
 
-    /// Returns all offered and not-yet-held asks of `group` (`protocol.md` §6.1
-    /// `ledger(g)`).
+    /// Returns all offered and not-yet-held asks of `group` (`seacast-lite.md`
+    /// §6.1 `ledger(g)`).
     pub fn ledger(&self, group: &GroupId) -> InlineVec<Ask, MAX_BITMAP_BITS> {
         let mut bits = Bitmap::new();
         for q in self.pairs.offering(group) {
@@ -918,8 +919,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// `group`'s count is known now: the holdings, offers, asks, tries and
-    /// promises of an index it has not go (`drop_beyond`, `protocol.md` §4.2,
-    /// §8.2). Every
+    /// promises of an index it has not go (`drop_beyond`, `seacast-lite.md`
+    /// §4.2, §8.2). Every
     /// ask is of an offered index, so the offers name them all. A tie past the
     /// count went at its release, before the group could open.
     pub(crate) fn drop_beyond(&mut self, group: GroupId, n: u32) {

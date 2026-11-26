@@ -14,7 +14,7 @@ pub const MAX_GOSSIP_GROUPS: usize = 64;
 /// Maximum sliding heartbeat windows in [`GossipHistory`].
 pub const MAX_GOSSIP_WINDOWS: usize = 8;
 
-/// Outcome of `SeacastNode::next_to_send` for a peer's writer (`protocol-v2.md`
+/// Outcome of `SeacastNode::next_to_send` for a peer's writer (`seacast.md`
 /// §4.11).
 // Not boxed: the writer path does not allocate.
 #[allow(clippy::large_enum_variant)]
@@ -28,7 +28,7 @@ pub enum DispatchOutcome<B> {
     Empty,
 }
 
-/// The two-lane bounded per-peer send queue (`protocol.md` §7, §8.2),
+/// The two-lane bounded per-peer send queue (`seacast-lite.md` §7, §8.2),
 /// preallocated at initialization.
 #[derive(Debug, Clone)]
 pub struct PeerQueue {
@@ -176,7 +176,7 @@ impl PeerQueue {
 }
 
 /// Everything kept of one connection by the peer alone, or by peer and type
-/// (`protocol-v2.md` §3). Reset when the connection closes.
+/// (`seacast.md` §3). Reset when the connection closes.
 #[derive(Debug, Clone)]
 pub struct Peer {
     /// The connection's node, taken at `connect_peer`.
@@ -274,7 +274,7 @@ pub struct PushCand {
 pub type RelationKey = (PeerId, TypeId, FamilyId, Colour);
 
 /// One direction of the push relations (`push_in` or `push_out`,
-/// `protocol-v2.md` §3): the peers of each type, family and colour as a
+/// `seacast.md` §3): the peers of each type, family and colour as a
 /// bitmask, so that a chunk's targets are read without a walk over the peers.
 #[derive(Debug, Clone)]
 pub struct Relations {
@@ -433,7 +433,7 @@ pub struct Group {
     pub claimed_all: bool,
     pub known_at: Option<Timestamp>,
     pub last_activity: Option<Timestamp>,
-    // Claims, deferral, probe and repair sampling (`protocol-v2.md` §3, §4.6)
+    // Claims, deferral, probe and repair sampling (`seacast.md` §3, §4.6)
     pub reconsider_at: Option<u64>,
     pub deferred: Option<bool>,
     pub waited: Option<bool>,
@@ -453,8 +453,8 @@ pub struct Group {
     pub rsample_final: Option<bool>,
 }
 
-/// The groups a node keeps anything of, a record each (`protocol-v2.md` §3,
-/// `protocol.md` §8.1).
+/// The groups a node keeps anything of, a record each (`seacast.md` §3,
+/// `seacast-lite.md` §8.1).
 ///
 /// Two limits, each `max_groups`: on the groups that are open, and on those
 /// that are not, which peers name before any chunk of them has been accepted.
@@ -711,8 +711,8 @@ impl<V: Copy> AskPeers<V> {
     }
 }
 
-/// Sliding heartbeat message cache for heartbeat gossip (`protocol.md` §6.4,
-/// `protocol-v2.md` §4.8).
+/// Sliding heartbeat message cache for heartbeat gossip (`seacast-lite.md`
+/// §6.4, `seacast.md` §4.8).
 ///
 /// Preallocated once at initialization; performs **zero heap allocation**
 /// during `put`, `shift`, `gossip_group_bits`, and `remove_group`.
@@ -857,7 +857,7 @@ impl Pair {
 type PairKey = (PeerId, GroupId);
 
 /// Everything kept per peer and group (`peer_has`, `pushed`, `sent_to`,
-/// `served`, `want_p`, `offered`, its time and `park` in `protocol-v2.md` §3),
+/// `served`, `want_p`, `offered`, its time and `park` in `seacast.md` §3),
 /// one record a pair.
 ///
 /// A record holds its bitmaps narrow. The first index past them moves the
@@ -1213,7 +1213,7 @@ impl Pairs {
     }
 
     /// As a claimant: whether the peer's probe of the group was answered
-    /// (`protocol-v2.md` §4.6 `probe_served`).
+    /// (`seacast.md` §4.6 `probe_served`).
     pub fn probe_served(&self, key: &PairKey) -> bool {
         self.recs.get(key).is_some_and(|pair| pair.flags & PROBE_SERVED != 0)
     }

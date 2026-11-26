@@ -7,8 +7,8 @@ use crate::{
 };
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// Runs heartbeat maintenance (`protocol-v2.md` §4.8 `on_heartbeat`,
-    /// `protocol.md` §6.4) with zero heap allocation.
+    /// Runs heartbeat maintenance (`seacast.md` §4.8 `on_heartbeat`,
+    /// `seacast-lite.md` §6.4) with zero heap allocation.
     pub fn on_heartbeat<E, C, R, D>(
         &mut self,
         env: &mut E,
@@ -75,10 +75,11 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
         let mut eligible = std::mem::replace(&mut self.peer_scratch, PreallocVec::with_capacity(0));
         eligible.clear();
-        // Peers that joined some object type on their link and hold no relation with
-        // this node.
+        // `joined_peers()` that hold no relation with this node (`seacast.md` §3):
+        // a link of a type the node runs, not a JOIN received alone.
+        let types = catalog.joined_types();
         for &q in self.peers.iter() {
-            let joined = self.slots.get(q).is_some_and(|s| !s.join_recv.is_empty());
+            let joined = types.iter().any(|&t| self.in_set(self.links(t), q));
             if joined && !self.is_related(q) {
                 let _ = eligible.push(q);
             }
@@ -103,7 +104,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Drops the ties on a group that has no state and that its sender no
-    /// longer names: one the domain never told of (`protocol.md` §4.2
+    /// longer names: one the domain never told of (`seacast-lite.md` §4.2
     /// `drop_stale_waits`). A tie on a group with state goes at its expiry.
     fn drop_stale_ties<E, C>(&mut self, env: &mut E, catalog: &C)
     where
@@ -131,7 +132,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
     }
 
-    /// Sends one peer's paced gossip per tick (`protocol.md` §6.4
+    /// Sends one peer's paced gossip per tick (`seacast-lite.md` §6.4
     /// `on_pace_tick`).
     pub fn on_pace_tick<E, C>(&mut self, env: &mut E, catalog: &C)
     where
@@ -204,7 +205,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.release_wanted_groups(now);
 
         // `tried`, and `asked_parked` with it, live as long as an offer does; an ask's
-        // time, its window; a park, `PARK_TTL` (`protocol.md` §8.1).
+        // time, its window; a park, `PARK_TTL` (`seacast-lite.md` §8.1).
         let cutoff = now - self.config.offer_ttl;
         let asked_parked = &mut self.asked_parked;
         self.tried.retain(|ask, peer, at| {
@@ -218,7 +219,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.asked_at.retain(|_, &mut at| now - at < window);
 
         // Expire OFFER_TTL (30s after announcer's last offer of the group,
-        // `protocol.md` §8.1)
+        // `seacast-lite.md` §8.1)
         while let Some((p, g)) = self.pairs.expired_offer(cutoff) {
             let bits = self.pairs.take_offered(&(p, g)).unwrap_or(Bitmap::EMPTY);
             self.drop_offers(g, &bits, p);

@@ -1,6 +1,6 @@
 //! Systematic Reed–Solomon codec over `GF(2^8)` with primitive polynomial
 //! `0x11d` (`x^8 + x^4 + x^3 + x^2 + 1`) and evaluation points `0..N-1`
-//! (`protocol.md` §1 `[c6]`).
+//! (`seacast-lite.md` §1 `[c6]`).
 //!
 //! Encoding and decoding are both "each output segment is a fixed combination
 //! of input segments" ([`combine`]). The combination of one stretch of one
@@ -533,7 +533,7 @@ fn parity_rows<K: Kernel>(srcs: &[&[u8]], n: usize, rows: &[usize], dsts: &mut [
 
 /// Computes `k` parity chunks of length `segment_size` from `k` equal-sized
 /// (padded) data segments (`rs_parity(pad_each(segs, size), K)` in
-/// `protocol.md` §1 `[c6]`).
+/// `seacast-lite.md` §1 `[c6]`).
 pub fn rs_parity(padded_data_segs: &[Vec<u8>], parity_count: usize) -> Vec<Vec<u8>> {
     let k = padded_data_segs.len();
     assert!(k >= 1 && k + parity_count <= MAX_WIDE_CHUNKS);

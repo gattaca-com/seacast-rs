@@ -3,7 +3,7 @@ name = "seacast-codec"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Reed-Solomon GF(2^8) erasure coding, Merkle trees, and segmentation for SEACAST v2"
+description = "Reed-Solomon GF(2^8) erasure coding, Merkle trees, and segmentation for SEACAST"
 
 [dependencies]
 seacast-core = { path = "../seacast-core" }

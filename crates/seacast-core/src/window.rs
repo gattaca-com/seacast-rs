@@ -17,7 +17,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Returns `true` if `entry` is an unsolicited push of a chunk this node
-    /// held from the start as source (`protocol-v2.md` §4.12
+    /// held from the start as source (`seacast.md` §4.12
     /// `own_chunk(e)`).
     pub fn own_chunk(&self, entry: &Queued) -> bool {
         let &Queued::Chunk { group, index, solicited: false } = entry else {
@@ -30,9 +30,9 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         !in_received && !in_rebuilt
     }
 
-    /// Filters a popped queue entry right before sending (`protocol.md` §7.2
-    /// `filter_entry` `[c8, c12]`). An ask starts its promise here and a chunk
-    /// is recorded as sent.
+    /// Filters a popped queue entry right before sending (`seacast-lite.md`
+    /// §7.2 `filter_entry` `[c8, c12]`). An ask starts its promise here and
+    /// a chunk is recorded as sent.
     pub(crate) fn filter_entry<E, C>(
         &mut self,
         peer: PeerId,

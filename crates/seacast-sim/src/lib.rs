@@ -50,7 +50,7 @@ pub struct SimHeader {
     pub row: Option<u32>,
 }
 
-/// The five `protocol-v2.md` §6.2 settings.
+/// The five `seacast.md` §6.2 settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimSetting {
     /// Setting 1: Tier 4 payload broadcast (`M = 1`, `ALL`, `FORWARD`).
@@ -114,7 +114,7 @@ impl Default for SimConfig {
 }
 
 /// Pluggable `ObjectCatalog` implementation supporting all five
-/// `protocol-v2.md` §6.2 settings.
+/// `seacast.md` §6.2 settings.
 pub struct SimCatalog {
     pub node_id: PeerId,
     pub setting: SimSetting,
@@ -638,7 +638,7 @@ pub struct SimReport {
 }
 
 impl SimReport {
-    /// Returns `true` if all SEACAST v2 invariants (`I3`, duty budget,
+    /// Returns `true` if all SEACAST invariants (`I3`, duty budget,
     /// cross-fill `R4`, and completion) hold.
     pub fn invariants_hold(&self) -> bool {
         self.violations_i3 == 0 &&
@@ -847,7 +847,7 @@ pub fn run_simulation(cfg: SimConfig) -> SimReport {
         let row_params = TypeParams {
             announce_extra: AnnounceWidth::AllJoined,
             eager: false,
-            // `protocol-v2.md` §6.3: the rows' first ask and a claim's deferral, both
+            // `seacast.md` §6.3: the rows' first ask and a claim's deferral, both
             // decided at one second.
             start_delay: 1.0,
             serve_limit: (cfg.num_columns / 2) as usize,

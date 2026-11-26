@@ -2,7 +2,7 @@
 
 ## What this is
 
-A Rust implementation of SEACAST v2: chunked, erasure-coded diffusion of large objects between peers. The specification is the `informed-diffusion-spec` repository (`protocol-v2.md` is primary; `protocol.md` holds the rules it carries over). `README.md` describes the design, the host's contract, and every place the code departs from the specification. `NOTES.md` lists the open items: read it before starting, and keep it current.
+A Rust implementation of SEACAST: chunked, erasure-coded diffusion of large objects between peers. The specification is the `informed-diffusion-spec` repository (`seacast.md` is primary; `seacast-lite.md` holds the rules it carries over). `README.md` describes the design, the host's contract, and every place the code departs from the specification. `NOTES.md` lists the open items: read it before starting, and keep it current.
 
 ## Priorities
 
@@ -50,7 +50,7 @@ The README's last section lists the modules of `seacast-core`.
 just fmt                                 # rustfmt on the pinned nightly
 just clippy                              # clippy, warnings denied
 cargo test --release --workspace         # unit, limit, end-to-end and simulation tests
-cargo run --release -p seacast-sim       # the five settings of protocol-v2.md §6.2
+cargo run --release -p seacast-sim       # the five settings of seacast.md §6.2
 cargo run --release -p seacast-codec --example bench
 ```
 
@@ -70,7 +70,7 @@ cargo run --release -p seacast-codec --example bench
 ## Style
 
 - Explicit, systems-style Rust, in the tone of the Linux kernel or Firedancer.
-- Comments are terse and factual, written for senior systems engineers, and only where the logic is not obvious. No tutorial comments. Cite the specification's rule (`protocol-v2.md` §4.6) where code implements one.
+- Comments are terse and factual, written for senior systems engineers, and only where the logic is not obvious. No tutorial comments. Cite the specification's rule (`seacast.md` §4.6) where code implements one.
 - **Never put a measurement in a comment, a doc comment or this file.** It goes stale. A comment may say which way a result went and why, never by how much.
 - Simple technical English: concise, stable terminology, one term for one thing.
 - No em-dashes or en-dashes in prose. Never hard-wrap prose in Markdown: one paragraph is one line.

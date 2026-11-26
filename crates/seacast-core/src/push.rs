@@ -17,7 +17,7 @@ const MAX_PLAN_TARGETS: usize = 8;
 
 impl<B: ChunkBuffer> SeacastNode<B> {
     /// Returns the suppression scope of `group`: peers that may push this
-    /// family to us (`protocol-v2.md` §4.2 `suppression_scope`).
+    /// family to us (`seacast.md` §4.2 `suppression_scope`).
     pub fn suppression_scope<C>(&self, group: &GroupId, catalog: &C) -> PeerSet
     where
         C: ObjectCatalog<B>,
@@ -80,7 +80,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Returns what our holding says of `group` (`have_bits(g)` in
-    /// `protocol.md` §4.2 `[P4]`).
+    /// `seacast-lite.md` §4.2 `[P4]`).
     #[inline]
     pub fn have_bits(&self, group: &GroupId) -> Bitmap {
         self.groups
@@ -90,7 +90,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Forwards a verified chunk along each `(group, index)` axis in `axes`
-    /// where we have `FORWARD` duty (`protocol-v2.md` §4.4 `forward`).
+    /// where we have `FORWARD` duty (`seacast.md` §4.4 `forward`).
     pub fn forward<E, C, R>(
         &mut self,
         chunk: &ChunkMsg<B>,
@@ -153,8 +153,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Chooses up to `budget` push targets among the peers of `set` that `cand`
-    /// accepts (`protocol.md` §5.3 `choose_push`, `[c16]`). The targets come
-    /// in the node's peer scratch, which the caller gives back
+    /// accepts (`seacast-lite.md` §5.3 `choose_push`, `[c16]`). The targets
+    /// come in the node's peer scratch, which the caller gives back
     /// (`self.peer_scratch`).
     #[allow(clippy::too_many_arguments)]
     pub fn choose_push<C, R>(
@@ -225,7 +225,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         targets
     }
 
-    /// Proof guard (`protocol.md` §5.3 `guard_fails(p, g)` `[c16]`):
+    /// Proof guard (`seacast-lite.md` §5.3 `guard_fails(p, g)` `[c16]`):
     /// Demotes a peer that has been pushed at least `R_NODE` chunks of `group`,
     /// the first more than `GUARD_GRACE` ago, without sending any `Have`
     /// holding for `group`.
@@ -243,7 +243,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Records a chosen push to `peer` under every group the chunk fills, from
-    /// the ids alone (`protocol-v2.md` §4.4 `note_push`, R4): a chunk sent
+    /// the ids alone (`seacast.md` §4.4 `note_push`, R4): a chunk sent
     /// through one axis is not offered or repaired to that peer through
     /// another.
     pub fn note_push<C>(
@@ -274,7 +274,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Sends an offer `Have(offer = true)` to `peer` for indices in `bits`
-    /// (`protocol-v2.md` §4.4 `announce`).
+    /// (`seacast.md` §4.4 `announce`).
     pub fn announce<E, C>(
         &mut self,
         peer: PeerId,
@@ -357,7 +357,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Whom a source pushes below `STRIPE_UPLINK`, and offers to: the relation,
     /// or with none in the family for the colour, the links. The caller filters
-    /// by interest (`protocol-v2.md` §4.7 `source_pool`).
+    /// by interest (`seacast.md` §4.7 `source_pool`).
     pub fn source_pool(&self, t: TypeId, fam: FamilyId, colour: Colour) -> PeerSet {
         let relation = self.out_pushees(t, fam, colour);
         if self.count(relation) == 0 { self.links(t) } else { relation }
@@ -373,7 +373,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.sends.owe(peer, group, bits, single, env);
     }
 
-    /// Publishes a group as its source (`protocol-v2.md` §4.7 `publish`, `[c2,
+    /// Publishes a group as its source (`seacast.md` §4.7 `publish`, `[c2,
     /// c13, P4]`) with zero heap allocation.
     pub fn publish<E, C, R>(
         &mut self,
@@ -572,7 +572,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     /// A chunk of a group we publish is known to have arrived somewhere: a
     /// peer's holding names it, or its first copy's room timed out. It joins
     /// our holding, and the pool's peers not planned for it are offered it;
-    /// a refused push is owed, and not offered again (`protocol-v2.md` §4.7
+    /// a refused push is owed, and not offered again (`seacast.md` §4.7
     /// `origin_acked`, `[c3, P4]`).
     pub fn origin_acked<E, C>(&mut self, group: GroupId, index: u32, env: &mut E, catalog: &C)
     where
@@ -606,7 +606,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// The peers a source's pushes of `chunk` are chosen from, before their
-    /// interest is looked at (`protocol-v2.md` §4.7 `candidates_for_source`).
+    /// interest is looked at (`seacast.md` §4.7 `candidates_for_source`).
     pub fn source_set<C>(&self, chunk: &ChunkMsg<B>, catalog: &C) -> PeerSet
     where
         C: ObjectCatalog<B>,
@@ -622,7 +622,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Returns `true` if `peer` is projected to reach `K` for `group` without
-    /// further unsolicited pushes (`protocol-v2.md` §4.9 `projected(p, g)`,
+    /// further unsolicited pushes (`seacast.md` §4.9 `projected(p, g)`,
     /// `[c12]`).
     pub fn projected<C>(&self, peer: PeerId, group: &GroupId, _catalog: &C) -> bool
     where

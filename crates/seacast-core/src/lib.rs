@@ -1,7 +1,7 @@
 //! # `seacast-core`
 //!
-//! Standalone `sans-io` state machine for **SEACAST v2** (`protocol-v2.md` and
-//! `protocol.md` v0.8).
+//! Standalone `sans-io` state machine for **SEACAST** (`seacast.md` and
+//! `seacast-lite.md` v0.8).
 //!
 //! ## Design Principles
 //! - **Separation of concerns**: Each protocol subsystem lives in its own
@@ -289,7 +289,7 @@ mod tests {
         };
 
         // A peer's messages count once it has joined the type on the link
-        // (`protocol-v2.md` §2).
+        // (`seacast.md` §2).
         let peer_join = Join {
             object_type: TYPE,
             fork_digest: [0; 4],

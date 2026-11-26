@@ -15,8 +15,8 @@ use crate::{
 };
 
 impl<B: ChunkBuffer> SeacastNode<B> {
-    /// Handles an arriving chunk from `peer` (`protocol-v2.md` §4.2 `on_chunk`,
-    /// `protocol.md` §4.2).
+    /// Handles an arriving chunk from `peer` (`seacast.md` §4.2 `on_chunk`,
+    /// `seacast-lite.md` §4.2).
     pub fn on_chunk<E, C, R, D>(
         &mut self,
         peer: PeerId,
@@ -232,7 +232,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         let projected = Self::projections(catalog, &chunk);
         // A second id for an index already received on an axis is only
         // acknowledged there (`fill`), not forwarded; one held only as rebuilt
-        // is still forwarded (`protocol-v2.md` §4.2).
+        // is still forwarded (`seacast.md` §4.2).
         let mut new_axes: InlineVec<(GroupId, u32), MAX_PROJECTED> = InlineVec::new();
         for &(g, i) in &projected {
             if !self.groups.bits(&g, GroupBits::Received).is_some_and(|b| b.has(i)) {
@@ -247,7 +247,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 self.probe_answer(g, i, q);
             }
         }
-        // A dropped or expired axis is not acted on (`protocol-v2.md` §4.6).
+        // A dropped or expired axis is not acted on (`seacast.md` §4.6).
         let mut acting: InlineVec<(GroupId, u32), MAX_PROJECTED> = InlineVec::new();
         for &(g, i) in &new_axes {
             if !self.expired(&g) && !self.dropped(&g) {
@@ -263,7 +263,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Fills `(group, index)` with a verified or rebuilt chunk
-    /// (`protocol-v2.md` §4.2 `fill`).
+    /// (`seacast.md` §4.2 `fill`).
     pub fn fill<E, C>(
         &mut self,
         group: GroupId,
@@ -414,8 +414,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         true
     }
 
-    /// Defers a chunk whose group the domain cannot tell of yet (`protocol.md`
-    /// §4.2 `defer`).
+    /// Defers a chunk whose group the domain cannot tell of yet
+    /// (`seacast-lite.md` §4.2 `defer`).
     pub fn defer<E, C, D>(
         &mut self,
         peer: PeerId,
@@ -429,7 +429,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         D: DeferredStore<B>,
     {
         // A group beyond the peer's unknown groups: neither kept nor tied
-        // (`protocol.md` §8.2).
+        // (`seacast-lite.md` §8.2).
         if !self.admit_group(peer, &chunk.group) {
             return;
         }
@@ -446,8 +446,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
     }
 
-    /// Ties a sender to the group its deferred chunk is of (`protocol.md` §4.2
-    /// `tie`).
+    /// Ties a sender to the group its deferred chunk is of (`seacast-lite.md`
+    /// §4.2 `tie`).
     pub fn tie<C>(&mut self, peer: PeerId, chunk: &ChunkMsg<B>, _catalog: &C)
     where
         C: ObjectCatalog<B>,
@@ -482,8 +482,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.tied_bits.get(&(peer, ask.group)).is_some_and(|bits| bits.has(ask.index))
     }
 
-    /// The domain can now tell of `groups` (`protocol.md` §4.2
-    /// `on_block_installed`, `protocol-v2.md` §4.2 `on_header_validated`):
+    /// The domain can now tell of `groups` (`seacast-lite.md` §4.2
+    /// `on_block_installed`, `seacast.md` §4.2 `on_header_validated`):
     /// the chunks of them that waited are taken up again, each once; the
     /// senders tied to one it commits become announcers of what they
     /// sent, a tie on one it does not commit is dropped; and what was offered
@@ -558,7 +558,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                     continue;
                 }
                 self.pairs.clear_park(&(p, g));
-                // An index the group does not have is dropped (`protocol.md` §4.2).
+                // An index the group does not have is dropped (`seacast-lite.md` §4.2).
                 let count = self.groups.get(&g).and_then(|r| r.hdr.as_ref()).map(|h| h.n);
                 for i in bits.iter().filter(|&i| count.is_none_or(|n| i < n)) {
                     self.asked_parked.remove(&(g, i), p);
@@ -595,7 +595,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     }
 
     /// Checks whether our interest in `group` is satisfied and triggers
-    /// completion/decode (`protocol-v2.md` §4.6 `check_completion`).
+    /// completion/decode (`seacast.md` §4.6 `check_completion`).
     pub fn check_completion<E, C, R>(
         &mut self,
         group: GroupId,
@@ -702,7 +702,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         env.start_decode(group, DecodeJob { shape: &h, chunks });
     }
 
-    /// Level 2 and what follows it, on this thread (`protocol-v2.md` §4.6
+    /// Level 2 and what follows it, on this thread (`seacast.md` §4.6
     /// `decode_group`): for a host that does not decode elsewhere. Uses the
     /// node's scratch buffers.
     pub fn decode_group<E, C, R>(
@@ -728,7 +728,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.decode_out_scratch = out;
     }
 
-    /// The result of a group's level 2 (`protocol-v2.md` §4.6 `decode_group`,
+    /// The result of a group's level 2 (`seacast.md` §4.6 `decode_group`,
     /// from the decode on): `decoded` and `rebuilt` are what
     /// `TypeCodec::decode` gave for the job of `RuntimeEnv::start_decode`.
     /// Stores what was rebuilt, fills the groups it
@@ -793,8 +793,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         env.deliver(group, object);
     }
 
-    /// Drops a group when Level 2 or Level 3 validation fails (`protocol.md`
-    /// §4.6 `drop_group`).
+    /// Drops a group when Level 2 or Level 3 validation fails
+    /// (`seacast-lite.md` §4.6 `drop_group`).
     pub fn drop_group(&mut self, group: GroupId) {
         self.groups.rec(group).state.replace(GroupState::Invalid);
         self.groups.rec(group).stop_pull.replace(true);
@@ -826,12 +826,12 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         self.expire_due(env.now());
     }
 
-    /// Ends the active lifetime of every group past it (`protocol.md` §8.1): a
-    /// group `GROUP_TTL` after its last chunk or its completion leaves a
-    /// tombstone and nothing else; a deferred chunk goes `GROUP_TTL` after
-    /// it arrived; a tombstone goes after its own time. A group the domain
-    /// gave a deadline goes at it if that is sooner, as do its deferred
-    /// chunks, and its tombstone is kept until it.
+    /// Ends the active lifetime of every group past it (`seacast-lite.md`
+    /// §8.1): a group `GROUP_TTL` after its last chunk or its completion
+    /// leaves a tombstone and nothing else; a deferred chunk goes
+    /// `GROUP_TTL` after it arrived; a tombstone goes after its own time. A
+    /// group the domain gave a deadline goes at it if that is sooner, as do
+    /// its deferred chunks, and its tombstone is kept until it.
     pub(crate) fn expire_groups<E, D>(&mut self, env: &mut E, deferred_store: &mut D)
     where
         E: RuntimeEnv<B>,
