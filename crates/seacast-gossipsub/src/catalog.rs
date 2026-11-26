@@ -57,8 +57,13 @@ pub fn payload_params() -> TypeParams {
 /// The JOIN a subscription to the payload's topic stands for, ours and a
 /// peer's (`seacast-bindings.md` §0): every chunk, with duty.
 pub const fn payload_join(fork_digest: ForkDigest) -> Join {
+    topic_join(PAYLOAD, fork_digest)
+}
+
+/// [`payload_join`] for the topic of `object_type`.
+pub const fn topic_join(object_type: TypeId, fork_digest: ForkDigest) -> Join {
     Join {
-        object_type: PAYLOAD,
+        object_type,
         fork_digest,
         interest: InterestKind::All,
         custody_count: 0,
@@ -79,7 +84,135 @@ pub struct PayloadCatalog<Host, C> {
 impl<Host: PayloadHost, C> PayloadCatalog<Host, C> {
     /// The catalog with [`payload_params`] and [`payload_join`].
     pub fn new(host: Host, codec: C, fork_digest: ForkDigest) -> Self {
-        Self { host, codec, params: payload_params(), join: payload_join(fork_digest) }
+        Self::of(PAYLOAD, host, codec, fork_digest)
+    }
+
+    /// The catalog of the topic of `object_type`, `codec` its codec.
+    pub fn of(object_type: TypeId, host: Host, codec: C, fork_digest: ForkDigest) -> Self {
+        Self { host, codec, params: payload_params(), join: topic_join(object_type, fork_digest) }
+    }
+}
+
+/// Several chunk topics in one node: the type with id `i` is the topic of
+/// `types[i]`, with its own host, codec and parameters. A chunk, an IHAVE and
+/// a subscription name their topic, which gives the type. An IWANT and an
+/// IDONTWANT entry name none: their type is that of the group on record with
+/// the key, and an entry of no such group is not the node's.
+///
+/// A key under two types is two groups. The node ids are the first topic's
+/// host's.
+pub struct TopicCatalogs<Host, C> {
+    pub types: Vec<PayloadCatalog<Host, C>>,
+}
+
+impl<Host: PayloadHost, C> TopicCatalogs<Host, C> {
+    /// `types[i]` made with [`PayloadCatalog::of`] for `TypeId(i)`.
+    pub fn new(types: Vec<PayloadCatalog<Host, C>>) -> Self {
+        assert!(!types.is_empty() && types.len() <= MAX_JOINED_TYPES);
+        assert!(types.iter().enumerate().all(|(i, of)| of.join.object_type.0 as usize == i));
+        Self { types }
+    }
+
+    fn of(&self, t: TypeId) -> Option<&PayloadCatalog<Host, C>> {
+        self.types.get(t.0 as usize)
+    }
+
+    fn of_mut(&mut self, t: TypeId) -> Option<&mut PayloadCatalog<Host, C>> {
+        self.types.get_mut(t.0 as usize)
+    }
+}
+
+/// A chunk of a type the node does not run fails level 1.
+impl<Host, C, B> TypeCodec<B> for TopicCatalogs<Host, C>
+where
+    Host: PayloadHost,
+    C: TypeCodec<B>,
+    B: ChunkBuffer,
+{
+    fn shape(&self, chunk: &ChunkMsg<B>) -> Option<Shape> {
+        self.of(chunk.group.type_id)?.shape(chunk)
+    }
+
+    fn check(&self, chunk: &ChunkMsg<B>) -> bool {
+        self.of(chunk.group.type_id).is_some_and(|of| of.check(chunk))
+    }
+
+    fn check_proof(&mut self, chunk: &ChunkMsg<B>) -> ValidationResult {
+        match self.of_mut(chunk.group.type_id) {
+            Some(of) => of.check_proof(chunk),
+            None => ValidationResult::Reject,
+        }
+    }
+
+    fn header_id(&self, chunk: &ChunkMsg<B>) -> Bytes32 {
+        self.of(chunk.group.type_id).map_or([0; 32], |of| of.header_id(chunk))
+    }
+
+    fn context<'a>(&self, chunk: &'a ChunkMsg<B>) -> &'a [u8] {
+        self.of(chunk.group.type_id).map_or(&[], |of| of.context(chunk))
+    }
+
+    fn decode(
+        &mut self,
+        group: &GroupId,
+        available: &[ChunkMsg<B>],
+        shape: &Shape,
+        out_rebuilt: &mut PreallocVec<ChunkMsg<B>>,
+    ) -> Option<B> {
+        self.of_mut(group.type_id)?.decode(group, available, shape, out_rebuilt)
+    }
+
+    fn wire_size(&self, chunk: &ChunkMsg<B>, first_of_group: bool) -> usize {
+        self.of(chunk.group.type_id).map_or(0, |of| of.wire_size(chunk, first_of_group))
+    }
+}
+
+impl<Host: PayloadHost, C> Domain for TopicCatalogs<Host, C> {
+    fn authenticate(
+        &mut self,
+        group: &GroupId,
+        header_id: &Bytes32,
+        context: &[u8],
+    ) -> ValidationResult {
+        match self.of_mut(group.type_id) {
+            Some(of) => of.authenticate(group, header_id, context),
+            None => ValidationResult::Reject,
+        }
+    }
+
+    fn authenticable(&self, group: &GroupId) -> bool {
+        self.of(group.type_id).is_some_and(|of| of.authenticable(group))
+    }
+
+    fn deadline(&self, group: &GroupId, context: &[u8]) -> Option<Timestamp> {
+        self.of(group.type_id)?.deadline(group, context)
+    }
+}
+
+impl<Host: PayloadHost, C> Policy for TopicCatalogs<Host, C> {
+    /// Asked for a type the node runs only.
+    fn params(&self, t: TypeId) -> &TypeParams {
+        &self.types[t.0 as usize].params
+    }
+
+    fn our_join(&self, t: TypeId) -> Join {
+        self.types[t.0 as usize].join
+    }
+
+    fn joined_types(&self) -> InlineVec<TypeId, MAX_JOINED_TYPES> {
+        let mut types = InlineVec::new();
+        for of in &self.types {
+            let _ = types.push(of.join.object_type);
+        }
+        types
+    }
+
+    fn tiebreak(&self, chunk_id: &ChunkId, peer: PeerId) -> u64 {
+        self.types[0].tiebreak(chunk_id, peer)
+    }
+
+    fn node_id(&self, peer: PeerId) -> NodeId {
+        self.types[0].host.node_id(peer)
     }
 }
 

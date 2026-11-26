@@ -60,7 +60,15 @@ pub fn group_key(gid: &Bytes32, slot: u64) -> Bytes32 {
 
 /// The node's id of the payload group with `key` (`seacast-bindings.md` §1.2).
 pub const fn payload_group(key: Bytes32) -> GroupId {
-    GroupId::new(PAYLOAD, key, 0)
+    topic_group(PAYLOAD, key)
+}
+
+/// The node's id of the group with `key` on the topic of `object_type`. The
+/// wire names a group by its key alone: a host with a type a topic gives the
+/// type from the topic, and for an entry that names no topic from the group
+/// it has on record.
+pub const fn topic_group(object_type: TypeId, key: Bytes32) -> GroupId {
+    GroupId::new(object_type, key, 0)
 }
 
 /// The message id of a payload chunk with the node's id `id`.
@@ -74,9 +82,14 @@ pub fn message_id_of(id: &ChunkId) -> MessageId {
 /// The node's id of the payload chunk whose message id is `mid`. `None`: not
 /// of a chunk's length.
 pub fn chunk_id_of(mid: &[u8]) -> Option<ChunkId> {
+    chunk_id_on(PAYLOAD, mid)
+}
+
+/// [`chunk_id_of`] for a chunk of `object_type`.
+pub fn chunk_id_on(object_type: TypeId, mid: &[u8]) -> Option<ChunkId> {
     let mid: &MessageId = mid.try_into().ok()?;
     let mut out = [0u8; 59];
-    out[0] = PAYLOAD.0;
+    out[0] = object_type.0;
     out[1..33].copy_from_slice(&mid[..32]);
     out[35..].copy_from_slice(&mid[32..]);
     Some(out)
@@ -167,6 +180,8 @@ pub fn build_chunk(
 /// its catalog's `check`.
 pub struct PayloadCodec<Pool, B> {
     pub pool: Pool,
+    /// The type of the topic's groups.
+    object_type: TypeId,
     /// The content id's hash over what precedes the chunk: the domain, the
     /// topic's length, the topic.
     id_prefix: Sha256,
@@ -180,11 +195,17 @@ where
 {
     /// `topic`: the gossipsub topic's name, which a chunk's content id binds.
     pub fn new(pool: Pool, topic: &[u8]) -> Self {
+        Self::of(PAYLOAD, pool, topic)
+    }
+
+    /// The codec of `topic` where its groups are of `object_type`: a host
+    /// with several chunk topics gives each a type of its own.
+    pub fn of(object_type: TypeId, pool: Pool, topic: &[u8]) -> Self {
         let mut id_prefix = Sha256::new();
         id_prefix.update(&MESSAGE_DOMAIN_VALID_SNAPPY);
         id_prefix.update(&(topic.len() as u64).to_le_bytes());
         id_prefix.update(topic);
-        Self { pool, id_prefix, _buffer: PhantomData }
+        Self { pool, object_type, id_prefix, _buffer: PhantomData }
     }
 
     /// The Altair message id of `frame` on the topic: the first 20 bytes of
@@ -210,7 +231,8 @@ where
         let len = snappy::decompressed_len(data).filter(|&len| len <= MAX_CHUNK_BYTES)?;
         let frame = decompress(data, len).filter(|frame| frame.len() == len)?;
         let f = split(&frame)?;
-        let (group, index, memo) = (payload_group(f.group), f.index, leaf_hash(f.data));
+        let group = topic_group(self.object_type, f.group);
+        let (index, memo) = (f.index, leaf_hash(f.data));
         let cached_id = self.chunk_id(&group, index, frame.as_bytes(), frame.tail());
         Some(ChunkMsg { group, index, cached_id, frame, memo, wire_len: data.len() as u32 })
     }
@@ -226,7 +248,7 @@ where
     ) -> Vec<ChunkMsg<B>> {
         let slot = u64::from_le_bytes(context[..8].try_into().unwrap());
         let key = group_key(&group_id(descriptor), slot);
-        let group = payload_group(key);
+        let group = topic_group(self.object_type, key);
         shards
             .iter()
             .map(|shard| {
@@ -302,7 +324,7 @@ where
             return false;
         };
         let d = &f.descriptor;
-        chunk.group == payload_group(f.group) &&
+        chunk.group == topic_group(self.object_type, f.group) &&
             chunk.index == f.index &&
             d.is_valid() &&
             d.count as usize <= MAX_PLAIN_CHUNKS &&
@@ -388,6 +410,33 @@ mod tests {
         let mut codec = PayloadCodec::new(VecBufferPool, TOPIC);
         let chunks = codec.build_chunks(&context(77), &descriptor, &shards);
         (codec, chunks)
+    }
+
+    /// A second topic's groups are of its own type: the wire's bytes say
+    /// nothing of it, the node's ids do.
+    #[test]
+    fn a_topic_gives_its_type() {
+        const OTHER: TypeId = TypeId(1);
+        let body: Vec<u8> = (0..50_000u32).map(|i| (i * 31 % 251) as u8).collect();
+        let (descriptor, shards) =
+            build_group::<Vec<u8>, _, _>(&body, &mut VecBufferPool, &SnappyBlockCompressor);
+        let mut other: Codec = PayloadCodec::of(OTHER, VecBufferPool, b"/eth2/00000000/other");
+        let chunks = other.build_chunks(&context(77), &descriptor, &shards);
+        let chunk = &chunks[0];
+        let key = group_key(&group_id(&descriptor), 77);
+        assert_eq!(chunk.group, topic_group(OTHER, key));
+        assert_ne!(chunk.group, payload_group(key));
+        let mid = message_id_of(&chunk.cached_id);
+        assert_eq!(mid[..32], key);
+        assert_eq!(chunk_id_on(OTHER, &mid), Some(chunk.cached_id));
+        assert_ne!(chunk_id_of(&mid), Some(chunk.cached_id));
+        // Read back on its topic it is the same chunk; the payload's codec refuses it.
+        let data = snappy::compress(&chunk.frame);
+        let read = other.read_message(&data, snappy::decompress).unwrap();
+        assert_eq!((read.group, read.cached_id), (chunk.group, chunk.cached_id));
+        assert!(TypeCodec::check(&other, chunk));
+        let payload: Codec = PayloadCodec::new(VecBufferPool, TOPIC);
+        assert!(!TypeCodec::check(&payload, chunk));
     }
 
     #[test]

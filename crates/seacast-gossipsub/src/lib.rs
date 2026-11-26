@@ -15,13 +15,20 @@
 //!
 //! The binding names a group by 32 bytes, so only the payload's groups have
 //! strings: those of cell groups are open in the specification.
+//!
+//! A host with several chunk topics runs them in one node, a type each
+//! ([`TopicCatalogs`]). The readers here return the payload's type: the host
+//! sets the type its topic gives, or for an entry that names no topic the type
+//! of the group it has on record.
 
 pub mod catalog;
 pub mod control;
 pub mod frame;
 pub mod payload;
 
-pub use catalog::{PayloadCatalog, PayloadHost, payload_join, payload_params};
+pub use catalog::{
+    PayloadCatalog, PayloadHost, TopicCatalogs, payload_join, payload_params, topic_join,
+};
 pub use control::{
     HOLDING_FIXED, MAX_HAVE_STRING, OFFER_FIXED, WANT_BYTES, holding_string, is_seacast,
     offer_string, read_holding, read_offer, read_want, want_string, want_strings,
@@ -29,6 +36,6 @@ pub use control::{
 pub use frame::{Inbound, RpcOut, write_entry};
 pub use payload::{
     CHUNK_FIXED, CONTEXT_BYTES, Chunk, MAX_CHUNK_BYTES, MESSAGE_ID_BYTES, MessageId, PAYLOAD,
-    PayloadCodec, build_chunk, chunk_id_of, group_key, message_id_of, payload_group, split_chunk,
-    split_parts,
+    PayloadCodec, build_chunk, chunk_id_of, chunk_id_on, group_key, message_id_of, payload_group,
+    split_chunk, split_parts, topic_group,
 };

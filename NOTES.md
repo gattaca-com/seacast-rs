@@ -108,6 +108,15 @@ Left as they are:
 - **F20: with the pool of wide bitmaps empty, a pair's indices past 127 are not kept**, and with no wide row left a group's bitmap is not written.
 - **`probe_answers` full:** a probe's answer then loses its exemption at the write.
 
+## Several chunk topics in one node
+
+Added 2026-11-26, for a client that segments more than the payload (Silver: the envelope and the signed aggregate). Before it such a client ran a node a topic, each with its own tables, timers and send window.
+
+- **The type is the topic's.** `TopicCatalogs` holds a `PayloadCatalog` a type, type `i` at place `i`; `PayloadCodec::of` and `topic_join` make a topic's codec and JOIN. The single-type constructors are the case of one, and the payload's vectors are unchanged.
+- **An entry that names no topic is typed by lookup.** The readers of `control` still return the payload's type; the host sets the type from the topic (IHAVE) or from the group on record (IWANT, IDONTWANT) before it hands the entry to `Inbound`.
+- **Open: nothing here tests two topics end to end.** `a_topic_gives_its_type` covers the codec and the ids. The two-node test of both kinds under loss is in the client (`two_kinds_cross_in_one_node` in Silver's adapter); `tests/nodes.rs` runs one topic.
+- **Open: one send window for all topics of a peer.** The types now share `SendQueues` and its window, where two nodes had one each. Whether a large body of one type delays the other's chunks has not been measured.
+
 ## The specification's v0.12.0 to v0.13.0-rc.1 changes
 
 No rule changed. The pseudo-code of `seacast-lite.md` and `seacast-bindings.md` is the same at both versions, and `seacast.md`'s differs by the two items marked below. Applied 2026-11-26, with the restructure that followed the release candidate (reasons moved to `seacast-rationale.md` and `seacast-lite-rationale.md`, BCP 14 key words):

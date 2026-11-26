@@ -12,7 +12,7 @@ use seacast_codec::{
 use seacast_core::{
     BoundedDeferredStore, Bytes32, ChunkMsg, DecodeJob, DispatchOutcome, GroupId, GroupState,
     NodeConfig, NodeId, PeerId, PenaltyReason, PreallocVec, Rpc, RuntimeEnv, SeacastNode, Shape,
-    SplitMix64, TimerEvent, Timestamp, TypeCodec, ValidationResult,
+    SplitMix64, TimerEvent, Timestamp, TypeCodec, TypeId, ValidationResult,
 };
 use seacast_gossipsub::{
     CONTEXT_BYTES, Inbound, MESSAGE_ID_BYTES, PAYLOAD, PayloadCatalog, PayloadCodec, PayloadHost,
@@ -125,7 +125,7 @@ impl RpcOut<Vec<u8>> for Wire {
         self.messages
             .push((snappy::compress(&chunk.frame), message_id_of(&chunk.cached_id).into()));
     }
-    fn ihave(&mut self, entry: &[u8]) {
+    fn ihave(&mut self, _object_type: TypeId, entry: &[u8]) {
         self.ihave.push(entry.to_vec());
     }
     fn iwant(&mut self, entry: &[u8]) {

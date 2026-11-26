@@ -10,7 +10,7 @@
 //! `sink` is `SeacastNode::on_frame_part(peer, rpc, offered, ..)`, and returns
 //! its result.
 
-use seacast_core::{ChunkMsg, Have, Join, QueueEntry, Rpc, Want};
+use seacast_core::{ChunkMsg, Have, Join, QueueEntry, Rpc, TypeId, Want};
 
 use crate::control::{MAX_HAVE_STRING, holding_string, offer_string, want_strings};
 
@@ -107,8 +107,8 @@ pub trait RpcOut<B> {
     /// A chunk, as a message on its topic: its data is the frame compressed
     /// with snappy, its id [`message_id_of`] the chunk's.
     fn message(&mut self, chunk: &ChunkMsg<B>);
-    /// An entry of an IHAVE on the payload's topic.
-    fn ihave(&mut self, entry: &[u8]);
+    /// An entry of an IHAVE on the topic of `object_type`.
+    fn ihave(&mut self, object_type: TypeId, entry: &[u8]);
     /// An entry of an IWANT.
     fn iwant(&mut self, entry: &[u8]);
     /// An entry of an IDONTWANT.
@@ -126,7 +126,7 @@ pub fn write_entry<B>(entry: &QueueEntry<B>, out: &mut impl RpcOut<B>) {
     for have in &entry.haves {
         if have.offer {
             let len = offer_string(have, &mut string);
-            out.ihave(&string[..len]);
+            out.ihave(have.group.type_id, &string[..len]);
         } else {
             let len = holding_string(have, &mut string);
             out.idontwant(&string[..len]);
