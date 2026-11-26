@@ -216,7 +216,14 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             false
         });
         let window = self.config.scaled_iwant_window();
-        self.asked_at.retain(|_, &mut at| now - at < window);
+        let groups = &mut self.groups;
+        self.asked_at.retain(|ask, &mut at| {
+            let open = now - at < window;
+            if !open && let Some(rec) = groups.get_mut(&ask.group) {
+                rec.asks_open = rec.asks_open.saturating_sub(1);
+            }
+            open
+        });
 
         // Expire OFFER_TTL (30s after announcer's last offer of the group,
         // `seacast-lite.md` §8.1)

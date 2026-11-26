@@ -428,6 +428,8 @@ pub struct Group {
     /// The row of `Groups::wide` that holds the bitmaps kept there.
     wide: Option<u32>,
     pub stop_pull: Option<bool>,
+    /// The indices asked for whose ask is on record (`asked_at`).
+    pub asks_open: u16,
     /// Whether a holding of this group has gone out with `claim_all`: any index
     /// may then be asked for.
     pub claimed_all: bool,

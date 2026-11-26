@@ -108,6 +108,16 @@ Left as they are:
 - **F20: with the pool of wide bitmaps empty, a pair's indices past 127 are not kept**, and with no wide row left a group's bitmap is not written.
 - **`probe_answers` full:** a probe's answer then loses its exemption at the write.
 
+## Asks bounded by what a decode takes
+
+Added 2026-11-26. In Silver's lab the origin of an aggregate sent each of its peers the whole coded set: it pushes a chunk to `R` peers and offers the rest, and each peer asked for every chunk it was offered and did not hold.
+
+- **`may_ask` refuses an index once held plus asked reach `K`** (`asks_reach_k`, `Group::asks_open`). The count of open asks follows `asked_at`: up at a first ask of an index, down when its record goes (the chunk came, or the window ran out and the heartbeat swept it).
+- **The simulator's summary changed**, by intent: in the two payload settings the answers to asks fell by about half and the chunks rebuilt rose a little; the delays and the invariants are as they were. The cell settings are unchanged.
+- **Before the group's first chunk the threshold is guessed** as half of what the peer offers: it is in a chunk's header and in no offer. The guess holds while a coded group has as much parity as data (`build_group`). Of a group that is not coded half is asked for then and the rest at the first heartbeat after a chunk has told; an offer that names only part of a group is under-asked the same way. Open: the rest could be asked for when the header comes, not at the heartbeat.
+- **Open: an index left out waits for the heartbeat.** Where the chunks asked for do not come and no other announcer has them, the rest are asked for at the next heartbeat, not at the ask's own retry.
+- **Open: not in the specification.** It is a scheduling choice of the asker (`seacast.md` §0 leaves those to the node), but `seacast-lite.md` §6.1 states the ask for every index.
+
 ## A frame without context, and attachments
 
 Added 2026-11-26, for the signed aggregate in Silver: its chunks are to carry the aggregator's claim (committee, votes, a signature) and not a slot and block root, and only to a peer that does not have it yet.

@@ -380,8 +380,8 @@ fn body(len: usize) -> Vec<u8> {
 }
 
 /// The source pushes part of the group as messages and offers the rest in an
-/// IHAVE, which the receiver asks for in IWANTs. The chunks wait at the
-/// receiver for its block, then give the body.
+/// IHAVE, of which the receiver asks for what it lacks to decode in IWANTs. The
+/// chunks wait at the receiver for its block, then give the body.
 #[test]
 fn a_payload_crosses_a_link() {
     let (mut a, mut b) = linked();
@@ -414,7 +414,8 @@ fn a_payload_crosses_a_link() {
     assert!(a.seen.holdings > 0 && a.seen.foreign > 0);
     assert!(a.env.penalties.is_empty() && b.env.penalties.is_empty());
     assert!(a.pushed > 0 && b.seen.offers > 0 && a.seen.wants > 0);
-    assert_eq!(b.seen.messages, n);
+    // The receiver took the chunks a decode needs and computed the rest.
+    assert_eq!(b.seen.messages, descriptor.k() as usize);
 
     // An unsubscription ends the link and the relation.
     b.receive(Wire { subscribe: Some(false), ..Wire::default() });

@@ -557,8 +557,9 @@ fn every_ask_of_an_offer_is_sent() {
         let _ = rpc.haves.push(Have::offer(group(tag), Bitmap::all_bits(300)));
     }
     world.rpc(1, rpc);
+    // Half of each group: its threshold is not known before a chunk of it.
     let asked: usize = world.node.asked_at.len();
-    assert_eq!(asked, 900);
+    assert_eq!(asked, 450);
     let mut sent = 0;
     for entry in world.drain(1) {
         for want in entry.wants.iter() {
@@ -1344,7 +1345,7 @@ fn a_group_of_a_type_not_joined_is_ignored() {
     let mut rpc = Rpc::default();
     let _ = rpc.haves.push(Have::offer(group(1), Bitmap::all_bits(8)));
     world.rpc(1, rpc);
-    assert_eq!(world.node.asked_at.len(), 8);
+    assert_eq!(world.node.asked_at.len(), 4);
 }
 
 /// A symmetric type keeps one relation both ways: grafted and answered as one,
@@ -2013,6 +2014,58 @@ fn sets_of_peers_are_not_cut_at_a_length() {
     let share = (world.node.config.gossip_factor * peers as f64) as usize;
     let (_, offers) = got(&mut world, 0);
     assert!(offers + 1 >= share && offers <= share, "{offers} of {share}");
+}
+
+/// A node that decodes at `K` asks for no more of a coded group than it lacks
+/// to `K`, whatever it is offered. One that does not decode asks for all.
+#[test]
+fn asks_stop_at_what_a_decode_takes() {
+    let asked = |catalog: Catalog| {
+        let mut world = World::new(catalog, 2, InterestKind::All);
+        let g = group(1);
+        // The chunk gives the group's count and threshold.
+        world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
+        world.drain(1);
+        let mut rpc = Rpc::default();
+        let _ = rpc.haves.push(Have::offer(g, Bitmap::all_bits(8)));
+        world.rpc(1, rpc);
+        let asks = world.drain(1);
+        asks.iter()
+            .flat_map(|entry| entry.wants.iter())
+            .map(|want| want.bits.popcount())
+            .sum::<u32>()
+    };
+    // One of four held: three more.
+    assert_eq!(asked(Catalog::new(8, 4)), 3);
+    // Not coded: every index is needed.
+    assert_eq!(asked(Catalog::new(8, 8)), 7);
+    let mut sampler = Catalog::new(8, 4);
+    sampler.later = Some(1.0);
+    assert_eq!(asked(sampler), 7);
+
+    // An offer ahead of the group's first chunk: the threshold is in no
+    // offer, and half of what is offered is asked for, coded or not. A chunk
+    // then tells, and the rest of a group that is not coded is asked for.
+    for (k, rest) in [(4, 0), (8, 4)] {
+        let mut world = World::new(Catalog::new(8, k), 2, InterestKind::All);
+        let g = group(1);
+        let mut rpc = Rpc::default();
+        let _ = rpc.haves.push(Have::offer(g, Bitmap::all_bits(8)));
+        world.rpc(1, rpc);
+        let asks = |world: &mut World| -> Bitmap {
+            let mut asked = Bitmap::new();
+            for want in world.drain(1).iter().flat_map(|entry| entry.wants.iter()) {
+                want.bits.iter().for_each(|index| asked.set(index));
+            }
+            asked
+        };
+        let first = asks(&mut world);
+        assert_eq!(first.popcount(), 4);
+        world.rpc(1, chunk_rpc(chunk(g, first.first_index().unwrap(), [0; 32])));
+        world.env.now += 1.0;
+        world.heartbeat();
+        assert_eq!(asks(&mut world).and_not(&first).popcount(), rest, "k = {k}");
+    }
 }
 
 /// Heartbeat gossip goes to `joined_peers()` (`seacast.md` §3), the links of a

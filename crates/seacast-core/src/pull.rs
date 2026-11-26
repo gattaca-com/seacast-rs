@@ -102,7 +102,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         for a in candidates {
             if self.over_ihave_limits(peer) {
                 self.held_back.insert((a.group, a.index), a);
-            } else if self.may_ask(a, peer, env) {
+            } else if self.may_ask(a, peer, env, catalog) {
                 let _ = asks.push(a);
                 if let Some(slot) = self.slots.get_mut(peer) {
                     slot.ihave_asked += 1;
@@ -596,32 +596,74 @@ impl<B: ChunkBuffer> SeacastNode<B> {
 
     /// Checks if an ask for `a` may be sent now (`seacast-lite.md` §6.1
     /// `may_ask(a, p)` `[c5]`).
-    pub fn may_ask<E>(&mut self, ask: Ask, peer: PeerId, env: &mut E) -> bool
+    pub fn may_ask<E, C>(&mut self, ask: Ask, peer: PeerId, env: &mut E, catalog: &C) -> bool
     where
         E: RuntimeEnv<B>,
+        C: ObjectCatalog<B>,
     {
         let now = env.now();
         let iwant_win = self.config.scaled_iwant_window();
-        match self.asked_at.get(&ask) {
+        let known = match self.asked_at.get(&ask) {
             Some(&at) if now - at < iwant_win => return false,
-            Some(_) => {}
+            Some(_) => true,
             // An ask that cannot be recorded is not made: nothing would stop its repeat. The
             // next heartbeat takes its group up again.
             None if self.asked_at.is_full() => {
                 self.held_groups.insert(ask.group);
                 return false;
             }
-            None => {}
-        }
+            // Nor is one for an index past what the node lacks to decode.
+            None if self.asks_reach_k(&ask.group, peer, catalog) => {
+                self.held_groups.insert(ask.group);
+                return false;
+            }
+            None => false,
+        };
         // The same for an ask over the peer's bound or the table's.
         if !self.tried.has_room(ask, peer) {
             self.held_groups.insert(ask.group);
             return false;
         }
         self.asked_at.insert(ask, now);
+        if !known && let Some(rec) = self.groups.get_mut(&ask.group) {
+            rec.asks_open = rec.asks_open.saturating_add(1);
+        }
         self.tried.insert(ask, peer, now);
         env.schedule_after(iwant_win + self.config.retry_slack, TimerEvent::RetryOffer(ask));
         true
+    }
+
+    /// Whether the chunks held of `group` and the indices asked for are as
+    /// many as it takes to decode. A node that decodes at `K` computes the
+    /// rest, so it asks for no more: a source that offers every chunk is not
+    /// made to send them all to each peer. An index left out is asked for
+    /// when one asked for does not come, at the heartbeat's retry. Not for a
+    /// group that is not coded, nor for a node that does not decode at `K`.
+    ///
+    /// `K` is in a chunk's header and in no offer. Before the group's first
+    /// chunk it is taken as half of what `peer` offers, a coded group having
+    /// as much parity as data: of a group that is not coded half is asked for
+    /// then, and the rest once a chunk has told.
+    fn asks_reach_k<C>(&self, group: &GroupId, peer: PeerId, catalog: &C) -> bool
+    where
+        C: ObjectCatalog<B>,
+    {
+        let Some(rec) = self.groups.get(group) else {
+            return false;
+        };
+        if !catalog.decode_at_k(group) {
+            return false;
+        }
+        let k = match rec.hdr {
+            Some(shape) if shape.k < shape.n => shape.k,
+            Some(_) => return false,
+            None => {
+                let offered = self.pairs.offered(&(peer, *group)).unwrap_or_default();
+                offered.popcount().div_ceil(2).max(1)
+            }
+        };
+        let held = self.groups.bits(group, GroupBits::Mine).map_or(0, |mine| mine.popcount());
+        held + rec.asks_open as u32 >= k
     }
 
     /// Retries an ask after `IWANT_WINDOW` closes (`seacast-lite.md` §6.1
@@ -662,7 +704,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             env.schedule_after(iwant_win + self.config.retry_slack, TimerEvent::RetryOffer(ask));
             return;
         };
-        if self.may_ask(ask, pick, env) {
+        if self.may_ask(ask, pick, env, catalog) {
             let want = Want::pull_ask(ask);
             self.enqueue(pick, Queued::from_want(want), false, env);
         }
@@ -891,7 +933,9 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             return;
         };
         let want = Want::pull_ask(ask);
-        if self.may_ask(ask, pick, env) && self.enqueue(pick, Queued::from_want(want), false, env) {
+        if self.may_ask(ask, pick, env, catalog) &&
+            self.enqueue(pick, Queued::from_want(want), false, env)
+        {
             if self.parked(pick, &ask.group, now) {
                 self.asked_parked.insert(k, pick);
             }
@@ -913,7 +957,11 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 }
             }
         }
-        self.asked_at.remove(&ask);
+        if self.asked_at.remove(&ask).is_some() &&
+            let Some(rec) = self.groups.get_mut(&group)
+        {
+            rec.asks_open = rec.asks_open.saturating_sub(1);
+        }
         self.asked_parked.remove_key(&(group, index));
         self.pairs.clear_offered(&group, index);
     }
