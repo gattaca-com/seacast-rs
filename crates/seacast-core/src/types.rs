@@ -185,6 +185,11 @@ pub struct Shape {
     pub k: u32,
 }
 
+/// `pct` percent of `total`, rounded up.
+pub(crate) fn share(total: u32, pct: u8) -> u32 {
+    (total * pct as u32).div_ceil(100)
+}
+
 /// Lifecycle state of a tracked group (`seacast-lite.md` §4.2, `seacast.md`
 /// §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -464,9 +469,17 @@ pub struct NodeConfig {
     /// (`SeacastNode::set_link_slow`). A chunk is pushed to the peers on
     /// links not slow, up to `r_fast` of them, before any on a slow link,
     /// and to `r` peers at the least. A peer on a slow link is offered no
-    /// more of a coded group than it lacks to decode, and is asked for no
-    /// more than the node lacks. Off, links are not told apart.
+    /// more of a coded group than `slow_offer_pct`, and is asked for no more
+    /// than the node lacks to `slow_ask_pct`. Off, links are not told apart.
     pub link_adaptive: bool,
+    /// The share of a coded group's `N`, in percent, a peer on a slow link
+    /// is offered up to, counting what it is known to hold. 50 is `K` for a
+    /// group with as much parity as data.
+    pub slow_offer_pct: u8,
+    /// The share of a coded group's `N`, in percent, the node holds or asks
+    /// for before it asks a slow link for no more. Before the group's first
+    /// chunk, the share of what the peer offers.
+    pub slow_ask_pct: u8,
     /// When a source offers its chunks (`SOURCE_OFFERS`).
     pub source_offers: SourceOffers,
     /// Card 16: Furthest-behind-first target selection with proof guard.
@@ -633,6 +646,8 @@ impl Default for NodeConfig {
             window_enabled: true,
             paced_gossip: true,
             link_adaptive: false,
+            slow_offer_pct: 50,
+            slow_ask_pct: 50,
             source_offers: SourceOffers::Ack,
             card16_enabled: true,
             card17_enabled: true,

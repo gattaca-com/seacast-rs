@@ -560,7 +560,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 self.pairs.pushed_bits(&key) |
                 self.pairs.sent_to(&key).unwrap_or_default() |
                 self.pairs.offered_to(&key).unwrap_or_default();
-            let room = shape.k.saturating_sub(known.popcount()) as usize;
+            let cap = crate::types::share(shape.n, self.config.slow_offer_pct);
+            let room = cap.saturating_sub(known.popcount()) as usize;
             let mut kept = Bitmap::new();
             for index in h.bits.and_not(&known).iter().take(room) {
                 kept.set(index);

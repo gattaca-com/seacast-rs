@@ -2118,6 +2118,61 @@ fn pushes_go_to_fast_links_and_offers_to_slow_ones_are_bounded() {
     assert_eq!(world.node.config.r, 2);
 }
 
+/// The bounds on a slow link are shares of `N` the host sets: asks stop at
+/// `slow_ask_pct`, offers at `slow_offer_pct`.
+#[test]
+fn slow_link_bounds_are_shares_of_the_coded_set() {
+    let config = NodeConfig {
+        link_adaptive: true,
+        slow_ask_pct: 75,
+        slow_offer_pct: 25,
+        ..NodeConfig::default()
+    };
+    let mut world = World::with_config(config.clone(), Catalog::new(8, 4), 2, InterestKind::All);
+    world.node.set_link_slow(1, true);
+    let g = group(1);
+    world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
+    world.drain(1);
+    let mut rpc = Rpc::default();
+    let _ = rpc.haves.push(Have::offer(g, Bitmap::all_bits(8)));
+    world.rpc(1, rpc);
+    let asked: u32 =
+        world.drain(1).iter().flat_map(|e| e.wants.iter()).map(|w| w.bits.popcount()).sum();
+    // One held, to six of eight.
+    assert_eq!(asked, 5);
+
+    // Pushes and offers to the slow peers 2 to 4 as chunks come from peer 1.
+    let sent = |slow_offer_pct: u8| {
+        let peers: u64 = 4;
+        let config = NodeConfig { slow_offer_pct, ..config.clone() };
+        let mut world = World::with_config(config, Catalog::new(8, 4), peers, InterestKind::All);
+        let fam = world.catalog.family(&g);
+        for peer in 1..=peers {
+            world.node.push_out.insert((peer, TYPE, fam, 0));
+            world.node.set_link_slow(peer, peer >= 2);
+        }
+        let (mut pushed, mut offered) = (0u32, 0u32);
+        for index in 0..8 {
+            world.rpc(1, chunk_rpc(chunk(g, index, [0; 32])));
+            for peer in 2..=peers {
+                for entry in world.drain(peer) {
+                    pushed += entry.chunk.is_some() as u32;
+                    let offers = entry.haves.iter().filter(|h| h.offer);
+                    offered += offers.map(|h| h.bits.popcount()).sum::<u32>();
+                }
+            }
+        }
+        (pushed, offered)
+    };
+    // Each slow peer is offered up to its share less what it is known to
+    // hold. The pushes are not bounded by it.
+    let (pushed, offered) = sent(25);
+    assert!(offered <= 3 * 2, "{pushed} {offered}");
+    let (wide_pushed, wide_offered) = sent(100);
+    assert_eq!(wide_pushed, pushed);
+    assert!(wide_offered > offered, "{wide_offered} {offered}");
+}
+
 /// Heartbeat gossip goes to `joined_peers()` (`seacast.md` §3), the links of a
 /// type the node runs. A peer whose JOIN is in is not one while ours is owed.
 #[test]

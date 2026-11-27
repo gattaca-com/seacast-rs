@@ -614,7 +614,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             }
             // Nor, of a peer on a slow link, one for an index past what the node
             // lacks to decode.
-            None if self.link_slow(peer) && self.asks_reach_k(&ask.group, peer, catalog) => {
+            None if self.link_slow(peer) && self.asks_reach_share(&ask.group, peer, catalog) => {
                 self.held_groups.insert(ask.group);
                 return false;
             }
@@ -661,7 +661,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
     /// chunk it is taken as half of what `peer` offers, a coded group having
     /// as much parity as data: of a group that is not coded half is asked for
     /// then, and the rest once a chunk has told.
-    fn asks_reach_k<C>(&self, group: &GroupId, peer: PeerId, catalog: &C) -> bool
+    fn asks_reach_share<C>(&self, group: &GroupId, peer: PeerId, catalog: &C) -> bool
     where
         C: ObjectCatalog<B>,
     {
@@ -671,16 +671,17 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         if !catalog.decode_at_k(group) {
             return false;
         }
-        let k = match rec.hdr {
-            Some(shape) if shape.k < shape.n => shape.k,
+        let pct = self.config.slow_ask_pct;
+        let cap = match rec.hdr {
+            Some(shape) if shape.k < shape.n => crate::types::share(shape.n, pct),
             Some(_) => return false,
             None => {
                 let offered = self.pairs.offered(&(peer, *group)).unwrap_or_default();
-                offered.popcount().div_ceil(2).max(1)
+                crate::types::share(offered.popcount(), pct).max(1)
             }
         };
         let held = self.groups.bits(group, GroupBits::Mine).map_or(0, |mine| mine.popcount());
-        held + rec.asks_open as u32 >= k
+        held + rec.asks_open as u32 >= cap
     }
 
     /// Retries an ask after `IWANT_WINDOW` closes (`seacast-lite.md` §6.1
