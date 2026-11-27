@@ -2173,6 +2173,35 @@ fn slow_link_bounds_are_shares_of_the_coded_set() {
     assert!(wide_offered > offered, "{wide_offered} {offered}");
 }
 
+/// A forwarded chunk is offered to `offer_peers` of the relation at most, a
+/// sample of those not pushed it.
+#[test]
+fn offers_go_to_offer_peers_at_most() {
+    let offered = |offer_peers: usize| {
+        let peers: u64 = 8;
+        let config = NodeConfig { offer_peers, ..NodeConfig::default() };
+        let mut world = World::with_config(config, Catalog::new(8, 4), peers, InterestKind::All);
+        let g = group(1);
+        let fam = world.catalog.family(&g);
+        for peer in 1..=peers {
+            world.node.push_out.insert((peer, TYPE, fam, 0));
+        }
+        world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
+        let (mut pushed, mut offered) = (0, 0);
+        for peer in 2..=peers {
+            let entries = world.drain(peer);
+            pushed += entries.iter().any(|e| e.chunk.is_some()) as usize;
+            offered += entries.iter().any(|e| e.haves.iter().any(|h| h.offer)) as usize;
+        }
+        (pushed, offered)
+    };
+    let (pushed, all) = offered(usize::MAX);
+    assert_eq!(pushed + all, 7);
+    let (pushed_capped, capped) = offered(2);
+    assert_eq!(pushed_capped, pushed);
+    assert_eq!(capped, 2);
+}
+
 /// Heartbeat gossip goes to `joined_peers()` (`seacast.md` §3), the links of a
 /// type the node runs. A peer whose JOIN is in is not one while ours is owed.
 #[test]

@@ -480,6 +480,10 @@ pub struct NodeConfig {
     /// for before it asks a slow link for no more. Before the group's first
     /// chunk, the share of what the peer offers.
     pub slow_ask_pct: u8,
+    /// The most peers a chunk is offered to as it is forwarded, and a group
+    /// as it is published, sampled when there are more. Heartbeat gossip and
+    /// rebuilt chunks are not bounded by it. Not in the specification.
+    pub offer_peers: usize,
     /// When a source offers its chunks (`SOURCE_OFFERS`).
     pub source_offers: SourceOffers,
     /// Card 16: Furthest-behind-first target selection with proof guard.
@@ -648,6 +652,7 @@ impl Default for NodeConfig {
             link_adaptive: false,
             slow_offer_pct: 50,
             slow_ask_pct: 50,
+            offer_peers: usize::MAX,
             source_offers: SourceOffers::Ack,
             card16_enabled: true,
             card17_enabled: true,

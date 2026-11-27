@@ -141,11 +141,22 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                     self.owe(q, g, Bitmap::singleton(i), env);
                 }
             }
-            self.for_each(pushees, |node, q| {
-                if cand(node, q) && !targets.contains(&q) {
-                    node.announce(q, g, Bitmap::singleton(i), env, catalog);
+            let mut offered =
+                std::mem::replace(&mut self.shuffle_scratch, PreallocVec::with_capacity(0));
+            offered.clear();
+            for q in self.peers_of(pushees) {
+                if cand(self, q) && !targets.contains(&q) {
+                    let _ = offered.push(q);
                 }
-            });
+            }
+            let cap = self.config.offer_peers;
+            if offered.len() > cap {
+                rng.shuffle(offered.as_mut_slice());
+            }
+            for &q in offered.iter().take(cap) {
+                self.announce(q, g, Bitmap::singleton(i), env, catalog);
+            }
+            self.shuffle_scratch = offered;
             self.peer_scratch = targets;
             self.announce_extra(g, i, env, catalog);
         }
@@ -447,7 +458,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             self.for_each(self.suppression_scope(&group, catalog), |node, q| {
                 node.send_have(q, group, env, catalog);
             });
-            self.offer_from_source(group, n, env, catalog);
+            self.offer_from_source(group, n, env, catalog, rng);
             return;
         }
         self.groups.put_bits(group, GroupBits::Origin, Bitmap::new());
@@ -510,22 +521,28 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         // The pool's peers not chosen for a chunk are offered it at its
         // acknowledgement (`origin_acked`), or now (`SOURCE_OFFERS = PUBLISH`).
         if self.config.source_offers == SourceOffers::Publish {
-            self.offer_from_source(group, n, env, catalog);
+            self.offer_from_source(group, n, env, catalog, rng);
         }
     }
 
     /// Offers each chunk of a group we publish to its colour's source pool, but
     /// to the peers it was pushed to: one offer a peer (`offer_at_publish`).
-    fn offer_from_source<E, C>(&mut self, group: GroupId, n: u32, env: &mut E, catalog: &C)
-    where
+    fn offer_from_source<E, C, R>(
+        &mut self,
+        group: GroupId,
+        n: u32,
+        env: &mut E,
+        catalog: &C,
+        rng: &mut R,
+    ) where
         E: RuntimeEnv<B>,
         C: ObjectCatalog<B>,
+        R: RngSource,
     {
         let t = group.type_id;
         let fam = catalog.family(&group);
         let m = catalog.params(t).m.max(1) as u32;
-        // Every pool is within the links.
-        self.for_each(self.links(t), |node, p| {
+        let pools = |node: &Self, p: PeerId| {
             let mut bits = Bitmap::new();
             for c in 0..m.min(n) {
                 if node.in_set(node.source_pool(t, fam, c as u16), p) {
@@ -534,11 +551,27 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                     }
                 }
             }
-            // `announce` leaves out a push that was made.
-            if !bits.is_empty() {
-                node.announce(p, group, bits, env, catalog);
+            bits
+        };
+        // Every pool is within the links.
+        let mut offered =
+            std::mem::replace(&mut self.shuffle_scratch, PreallocVec::with_capacity(0));
+        offered.clear();
+        for p in self.peers_of(self.links(t)) {
+            if !pools(self, p).is_empty() {
+                let _ = offered.push(p);
             }
-        });
+        }
+        let cap = self.config.offer_peers;
+        if offered.len() > cap {
+            rng.shuffle(offered.as_mut_slice());
+        }
+        // `announce` leaves out a push that was made.
+        for &p in offered.iter().take(cap) {
+            let bits = pools(self, p);
+            self.announce(p, group, bits, env, catalog);
+        }
+        self.shuffle_scratch = offered;
     }
 
     /// `SOURCE_OFFERS = PUBLISH`: a chunk of a group we publish is written for

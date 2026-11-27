@@ -119,6 +119,11 @@ Added 2026-11-26, after Silver's lab on rate-limited links. The origin of a body
 - **Open: no simulator setting marks a link slow**, so nothing here is measured outside Silver's lab.
 - **Open: every link starts as not slow.** The first burst to a new peer is pushed wide.
 
+## Offers bounded in number
+
+- **`offer_peers` bounds the peers offered a chunk at forward and a group at publish.** The candidates are gathered in `shuffle_scratch` and sampled with the node's rng only when there are more than the bound, so with the default (no bound) no random number is drawn and the simulator's summary is unchanged. `offer_from_source` takes the rng for it.
+- **Open: heartbeat gossip and `push_rebuilt`'s offers are not bounded,** and a peer left out of every chunk's sample learns of the group from heartbeat gossip only.
+
 ## Asks bounded by what a decode takes
 
 Added 2026-11-26. In Silver's lab the origin of an aggregate sent each of its peers the whole coded set: it pushes a chunk to `R` peers and offers the rest, and each peer asked for every chunk it was offered and did not hold.
