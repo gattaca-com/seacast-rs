@@ -2173,6 +2173,30 @@ fn slow_link_bounds_are_shares_of_the_coded_set() {
     assert!(wide_offered > offered, "{wide_offered} {offered}");
 }
 
+/// With enough links not slow, a forwarded chunk is pushed to none on a slow
+/// link, whatever the random draw among the proven.
+#[test]
+fn a_slow_link_is_not_pushed_to_while_fast_ones_fill_the_budget() {
+    let peers: u64 = 9;
+    let mut world = adaptive(Catalog::new(8, 4), peers);
+    let slow = |peer: u64| peer >= 6;
+    for peer in 1..=peers {
+        world.node.set_link_slow(peer, slow(peer));
+    }
+    for n in 1..=32 {
+        let g = group(n);
+        let fam = world.catalog.family(&g);
+        for peer in 1..=peers {
+            world.node.push_out.insert((peer, TYPE, fam, 0));
+        }
+        world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
+        for peer in 2..=peers {
+            let pushed = world.drain(peer).iter().any(|e| e.chunk.is_some());
+            assert!(!(slow(peer) && pushed), "group {n}: slow peer {peer} pushed");
+        }
+    }
+}
+
 /// A forwarded chunk is offered to `offer_peers` of the relation at most, a
 /// sample of those not pushed it.
 #[test]

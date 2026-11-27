@@ -118,6 +118,7 @@ Added 2026-11-26, after Silver's lab on rate-limited links. The origin of a body
 - **Open: an offer cut at the write is not owed.** A peer on a slow link that lacks more than it was offered, a connection of its other sources having dropped, is not offered the rest by this node until its link is no longer slow.
 - **Open: no simulator setting marks a link slow**, so nothing here is measured outside Silver's lab.
 - **Open: every link starts as not slow.** The first burst to a new peer is pushed wide.
+- **`[c16]`'s random draw at forward stays within one class of link.** It drew among the proven up to the median of what they know, across the boundary between links not slow and slow ones, so a slow peer could take a push while enough fast ones were left out. It now draws among the fast ones when they fill the budget, and among the slow ones for the rest otherwise (`choose_push`). With `link_adaptive` off every link is in one class, as before.
 
 ## Offers bounded in number
 

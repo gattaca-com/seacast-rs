@@ -230,13 +230,22 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 .then(a.peer.cmp(&b.peer))
         });
         if card16 && !at_source {
+            // The draw stays within one class of link: the links not slow fill
+            // the budget before any slow one is drawn.
+            let fast = order.iter().take_while(|c| !c.slow).count();
+            let (from, to) = match fast {
+                0 => (0, order.len()),
+                f if budget <= f => (0, f),
+                f => (f, order.len()),
+            };
+            let class = &mut order.as_mut_slice()[from..to];
             // Of the proven, those at or under the median of what they know: drawn at
             // random, ahead of the rest.
-            let proven = order.iter().take_while(|c| !c.unproven).count();
+            let proven = class.iter().take_while(|c| !c.unproven).count();
             if proven > 0 {
-                let median = order[(proven - 1) / 2].known;
-                let pool = order[..proven].iter().take_while(|c| c.known <= median).count();
-                rng.sample_in_place(&mut order.as_mut_slice()[..pool], budget.min(pool));
+                let median = class[(proven - 1) / 2].known;
+                let pool = class[..proven].iter().take_while(|c| c.known <= median).count();
+                rng.sample_in_place(&mut class[..pool], (budget - from).min(pool));
             }
         }
         targets.clear();
