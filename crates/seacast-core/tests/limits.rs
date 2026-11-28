@@ -2241,6 +2241,40 @@ fn pull_only_peers_and_nodes_get_and_make_no_pushes() {
     assert!((2..=4).all(|p| none[p] == (false, true)), "{none:?}");
 }
 
+/// A peer on a slow link is pushed no more of a coded group than
+/// `slow_push_pct` of its `N`, counting what it holds; the rest it is offered.
+#[test]
+fn pushes_to_a_slow_link_stop_at_its_share() {
+    let pushed = |slow_push_pct: u8| {
+        let peers: u64 = 4;
+        let config =
+            NodeConfig { link_adaptive: true, r: 3, slow_push_pct, ..NodeConfig::default() };
+        let mut world = World::with_config(config, Catalog::new(8, 4), peers, InterestKind::All);
+        let g = group(1);
+        let fam = world.catalog.family(&g);
+        for peer in 1..=peers {
+            world.node.push_out.insert((peer, TYPE, fam, 0));
+            world.node.set_link_slow(peer, true);
+        }
+        let mut pushed = [0u32; 5];
+        for index in 0..8 {
+            world.rpc(1, chunk_rpc(chunk(g, index, [0; 32])));
+            for peer in 2..=peers {
+                pushed[peer as usize] +=
+                    world.drain(peer).iter().filter(|e| e.chunk.is_some()).count() as u32;
+            }
+        }
+        pushed
+    };
+    // A tenth of eight is one chunk.
+    let all = pushed(100);
+    let bounded = pushed(10);
+    for (peer, &count) in bounded.iter().enumerate().skip(2) {
+        assert!(count <= 1, "peer {peer}: {count}");
+    }
+    assert!(all[2..].iter().sum::<u32>() > bounded[2..].iter().sum::<u32>(), "{all:?} {bounded:?}");
+}
+
 /// A forwarded chunk is offered to `offer_peers` of the relation at most, a
 /// sample of those not pushed it.
 #[test]

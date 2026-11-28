@@ -189,8 +189,12 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         if budget == 0 {
             return targets;
         }
-        // A peer that takes only what it asks for is offered instead.
-        for q in self.peers_of(set).filter(|&q| cand(self, q) && !self.peer_pull_only(q)) {
+        // A peer that takes only what it asks for is offered instead, as is
+        // one on a slow link that has its share of the group.
+        for q in self
+            .peers_of(set)
+            .filter(|&q| cand(self, q) && !self.peer_pull_only(q) && !self.slow_push_full(q, group))
+        {
             let _ = targets.push(q);
         }
         // The peers on links not slow are pushed to before any other, up to
@@ -255,6 +259,24 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
         self.push_scratch = order;
         targets
+    }
+
+    /// Whether `peer`, on a slow link, holds or has been pushed
+    /// `slow_push_pct` of `group`'s `N`: it is pushed no more of it. Only for
+    /// a coded group whose shape is known.
+    fn slow_push_full(&self, peer: PeerId, group: &GroupId) -> bool {
+        if self.config.slow_push_pct >= 100 || !self.link_slow(peer) {
+            return false;
+        }
+        let Some(shape) = self.groups.get(group).and_then(|rec| rec.hdr) else {
+            return false;
+        };
+        if shape.k >= shape.n {
+            return false;
+        }
+        let key = (peer, *group);
+        let known = self.pairs.has_bits(&key) | self.pairs.pushed_bits(&key);
+        known.popcount() >= crate::types::share(shape.n, self.config.slow_push_pct)
     }
 
     /// Whether chunks of type `t` are pushed: the type's `EAGER`, unless the

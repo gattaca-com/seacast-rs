@@ -473,6 +473,10 @@ pub struct NodeConfig {
     /// than the node lacks to `slow_ask_pct`. Off, links are not told apart.
     pub link_adaptive: bool,
     /// The share of a coded group's `N`, in percent, a peer on a slow link
+    /// is pushed up to, counting what it is known to hold; past it the
+    /// chunk is offered. 100 is no bound.
+    pub slow_push_pct: u8,
+    /// The share of a coded group's `N`, in percent, a peer on a slow link
     /// is offered up to, counting what it is known to hold. 50 is `K` for a
     /// group with as much parity as data.
     pub slow_offer_pct: u8,
@@ -655,6 +659,7 @@ impl Default for NodeConfig {
             window_enabled: true,
             paced_gossip: true,
             link_adaptive: false,
+            slow_push_pct: 100,
             slow_offer_pct: 50,
             slow_ask_pct: 50,
             offer_peers: usize::MAX,
