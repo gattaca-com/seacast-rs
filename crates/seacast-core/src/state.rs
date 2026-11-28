@@ -200,6 +200,9 @@ pub struct Peer {
     pub(crate) mark: u64,
     /// The host's word on the link: behind on what it is sent.
     pub(crate) slow: bool,
+    /// The peer said it takes no chunk it has not asked for.
+    #[cfg(feature = "pull-only")]
+    pub(crate) pull_only: bool,
 }
 
 impl Peer {
@@ -218,6 +221,8 @@ impl Peer {
             wanted_count: 0,
             mark: 0,
             slow: false,
+            #[cfg(feature = "pull-only")]
+            pull_only: false,
         }
     }
 
@@ -235,6 +240,10 @@ impl Peer {
         self.wanted_count = 0;
         self.mark = 0;
         self.slow = false;
+        #[cfg(feature = "pull-only")]
+        {
+            self.pull_only = false;
+        }
     }
 }
 

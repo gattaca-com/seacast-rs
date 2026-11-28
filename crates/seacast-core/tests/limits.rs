@@ -2197,6 +2197,50 @@ fn a_slow_link_is_not_pushed_to_while_fast_ones_fill_the_budget() {
     }
 }
 
+/// A peer that said it is pull only is pushed nothing and offered instead,
+/// and pushed to again once it says it is not. A node that is pull only
+/// pushes to nobody.
+#[cfg(feature = "pull-only")]
+#[test]
+fn pull_only_peers_and_nodes_get_and_make_no_pushes() {
+    let sent = |config: NodeConfig, pull_only_peer: Option<u64>| {
+        let peers: u64 = 4;
+        let mut world = World::with_config(config, Catalog::new(8, 4), peers, InterestKind::All);
+        let g = group(1);
+        let fam = world.catalog.family(&g);
+        for peer in 1..=peers {
+            world.node.push_out.insert((peer, TYPE, fam, 0));
+        }
+        if let Some(peer) = pull_only_peer {
+            world.node.set_peer_pull_only(peer, true);
+        }
+        world.rpc(1, chunk_rpc(chunk(g, 0, [0; 32])));
+        let mut out = [(false, false); 5];
+        for peer in 2..=peers {
+            let entries = world.drain(peer);
+            out[peer as usize] = (
+                entries.iter().any(|e| e.chunk.is_some()),
+                entries.iter().any(|e| e.haves.iter().any(|h| h.offer)),
+            );
+        }
+        (world, out)
+    };
+    let config = NodeConfig { r: 3, ..NodeConfig::default() };
+    // Pushed to peers 2 to 4; with peer 3 pull only, peer 3 is offered.
+    let (_, all) = sent(config.clone(), None);
+    assert!((2..=4).all(|p| all[p].0));
+    let (mut world, out) = sent(config.clone(), Some(3));
+    assert_eq!(out[3], (false, true));
+    assert!(out[2].0 && out[4].0);
+    // It says it takes pushes again: the next chunk goes to it.
+    world.node.set_peer_pull_only(3, false);
+    world.rpc(1, chunk_rpc(chunk(group(1), 1, [0; 32])));
+    assert!(world.drain(3).iter().any(|e| e.chunk.is_some()));
+    // A node that is pull only pushes to nobody, and offers to all.
+    let (_, none) = sent(NodeConfig { pull_only: true, ..config }, None);
+    assert!((2..=4).all(|p| none[p] == (false, true)), "{none:?}");
+}
+
 /// A forwarded chunk is offered to `offer_peers` of the relation at most, a
 /// sample of those not pushed it.
 #[test]

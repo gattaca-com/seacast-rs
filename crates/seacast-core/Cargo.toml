@@ -7,3 +7,9 @@ description = "Standalone sans-io state machine and pluggable traits for SEACAST
 
 [dependencies]
 fxhash = "0.2"
+
+[features]
+# A node may push nothing, and be told that a peer pushes nothing
+# (`NodeConfig::pull_only`, `SeacastNode::set_peer_pull_only`). Not in the
+# specification.
+pull-only = []

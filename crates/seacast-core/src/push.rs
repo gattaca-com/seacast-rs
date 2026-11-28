@@ -126,7 +126,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                     !node.pairs.peer_has(&(q, g)).map(|e| e.complete).unwrap_or(false)
             };
             let holding = self.peers_of(pushees).filter(|&q| held(self, q)).count();
-            let budget = if catalog.params(t).eager {
+            let budget = if self.eager(t, catalog) {
                 self.config.r_node().saturating_sub(holding)
             } else {
                 0
@@ -189,7 +189,8 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         if budget == 0 {
             return targets;
         }
-        for q in self.peers_of(set).filter(|&q| cand(self, q)) {
+        // A peer that takes only what it asks for is offered instead.
+        for q in self.peers_of(set).filter(|&q| cand(self, q) && !self.peer_pull_only(q)) {
             let _ = targets.push(q);
         }
         // The peers on links not slow are pushed to before any other, up to
@@ -254,6 +255,17 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
         self.push_scratch = order;
         targets
+    }
+
+    /// Whether chunks of type `t` are pushed: the type's `EAGER`, unless the
+    /// node is pull only.
+    #[inline]
+    pub(crate) fn eager<C: ObjectCatalog<B>>(&self, t: TypeId, catalog: &C) -> bool {
+        #[cfg(feature = "pull-only")]
+        if self.config.pull_only {
+            return false;
+        }
+        catalog.params(t).eager
     }
 
     /// Proof guard (`seacast-lite.md` §5.3 `guard_fails(p, g)` `[c16]`):
@@ -462,7 +474,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         // A pull-only type's source pushes nothing, so no acknowledgement can come:
         // its holding names every chunk, and every chunk is offered now
         // (`offer_at_publish`).
-        if !catalog.params(t).eager {
+        if !self.eager(t, catalog) {
             self.groups.put_bits(group, GroupBits::Origin, Bitmap::all_bits(n));
             self.for_each(self.suppression_scope(&group, catalog), |node, q| {
                 node.send_have(q, group, env, catalog);

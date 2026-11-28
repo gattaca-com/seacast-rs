@@ -6,6 +6,7 @@
 //! | IHAVE | offer: `"HAVE" 0x01 group(32) bitmap` |
 //! | IDONTWANT | holding: `"HAVE" 0x04 group(32) flags(1) bitmap`, or version 1 |
 //! | IWANT | `"WANT" 0x04 group(32) index(4 LE) flags(1) hops(1)`, or version 1 |
+//! | IHAVE | mode: `"MODE" 0x01 flags(1)`, not in the specification |
 //!
 //! A holding and a WANT are written at version 4, an offer at version 1. Which
 //! version to write where every extra field has its default is open in the
@@ -16,6 +17,8 @@ use seacast_core::{Bitmap, Bytes32, Have, MAX_BITMAP_BITS, MAX_HAVE_BYTES, Want}
 use crate::payload::{MESSAGE_ID_BYTES, payload_group};
 
 const HAVE_MAGIC: &[u8; 4] = b"HAVE";
+#[cfg(feature = "pull-only")]
+const MODE_MAGIC: &[u8; 4] = b"MODE";
 const WANT_MAGIC: &[u8; 4] = b"WANT";
 const V1: u8 = 1;
 const V4: u8 = 4;
@@ -28,6 +31,9 @@ pub const HOLDING_FIXED: usize = OFFER_FIXED + 1;
 pub const WANT_BYTES: usize = OFFER_FIXED + 4 + 1 + 1;
 /// A WANT at version 1 (`WantIndex`): no flags, no hops.
 const WANT_V1_BYTES: usize = OFFER_FIXED + 4;
+/// A mode: magic, version, flags.
+#[cfg(feature = "pull-only")]
+pub const MODE_BYTES: usize = 4 + 1 + 1;
 /// The longest string written: a holding with a full bitmap.
 pub const MAX_HAVE_STRING: usize = HOLDING_FIXED + MAX_HAVE_BYTES;
 
@@ -35,6 +41,8 @@ const CLAIM_ALL: u8 = 1;
 const COMPLETE: u8 = 2;
 const STANDING: u8 = 1;
 const PROBE: u8 = 2;
+#[cfg(feature = "pull-only")]
+const PULL_ONLY: u8 = 1;
 
 fn put_head(out: &mut [u8], magic: &[u8; 4], version: u8, group: &Bytes32) {
     out[..4].copy_from_slice(magic);
@@ -61,6 +69,26 @@ pub fn holding_string(h: &Have, out: &mut [u8; MAX_HAVE_STRING]) -> usize {
     put_bitmap(out, HOLDING_FIXED, &h.bits)
 }
 
+/// The IHAVE string by which a node tells a peer that it takes no chunk it
+/// has not asked for (`pull_only`), or takes them again. Sent on each chunk
+/// topic the peer joins.
+#[cfg(feature = "pull-only")]
+pub fn mode_string(pull_only: bool) -> [u8; MODE_BYTES] {
+    let mut out = [0; MODE_BYTES];
+    out[..4].copy_from_slice(MODE_MAGIC);
+    out[4] = V1;
+    out[5] = u8::from(pull_only) * PULL_ONLY;
+    out
+}
+
+/// An IHAVE entry as a mode: whether its sender is pull only. A later
+/// version is read for the flags it shares.
+#[cfg(feature = "pull-only")]
+pub fn read_mode(entry: &[u8]) -> Option<bool> {
+    let entry: &[u8; MODE_BYTES] = entry.get(..MODE_BYTES)?.try_into().ok()?;
+    (entry[..4] == *MODE_MAGIC && entry[4] >= V1).then_some(entry[5] & PULL_ONLY != 0)
+}
+
 /// The IWANT string of `w` for one index.
 pub fn want_string(w: &Want, index: u32) -> [u8; WANT_BYTES] {
     let mut out = [0u8; WANT_BYTES];
@@ -84,8 +112,19 @@ pub fn want_strings(w: &Want, mut put: impl FnMut(&[u8; WANT_BYTES])) {
 /// gossipsub. `true` is no verdict on the entry: the readers below give it.
 #[inline]
 pub fn is_seacast(entry: &[u8]) -> bool {
+    let mode = {
+        #[cfg(feature = "pull-only")]
+        {
+            entry.len() >= MODE_BYTES && entry[..4] == *MODE_MAGIC
+        }
+        #[cfg(not(feature = "pull-only"))]
+        {
+            false
+        }
+    };
     entry.len() == MESSAGE_ID_BYTES ||
-        entry.len() >= OFFER_FIXED && matches!(&entry[..4], b"HAVE" | b"WANT")
+        entry.len() >= OFFER_FIXED && matches!(&entry[..4], b"HAVE" | b"WANT") ||
+        mode
 }
 
 /// The group of a string that opens with `magic`, its version, and what
@@ -212,6 +251,20 @@ mod tests {
         assert!(!is_seacast(&out[..len - 1]));
         assert!(!is_seacast(b"HAVE"));
         assert!(!is_seacast(&[]));
+    }
+
+    #[cfg(feature = "pull-only")]
+    #[test]
+    fn test_mode_bytes() {
+        for pull_only in [true, false] {
+            let entry = mode_string(pull_only);
+            assert_eq!(&entry, &[b'M', b'O', b'D', b'E', 1, u8::from(pull_only)]);
+            assert!(is_seacast(&entry));
+            assert_eq!(read_mode(&entry), Some(pull_only));
+            assert_eq!(read_offer(&entry), None);
+        }
+        assert_eq!(read_mode(b"MODE\x01"), None);
+        assert_eq!(read_mode(b"MODE\x00\x01"), None);
     }
 
     #[test]

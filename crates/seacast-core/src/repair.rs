@@ -596,7 +596,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
             let k = h2.k;
             let prm2 = catalog.params(t2);
             let repair_budget = prm2.repair_budget;
-            let eager = prm2.eager;
+            let eager = self.eager(t2, catalog);
 
             if repair_budget && eager {
                 self.push_rebuilt_as_source(group, g2, t2, &items, env, catalog, rng);
@@ -631,7 +631,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 rng.shuffle(lacks.as_mut_slice());
 
                 for &(i2, src_i) in lacks.iter().take(short) {
-                    if !eager {
+                    if !eager || self.peer_pull_only(q) {
                         self.announce(q, g2, Bitmap::singleton(i2), env, catalog);
                         continue;
                     }
@@ -697,7 +697,7 @@ impl<B: ChunkBuffer> SeacastNode<B> {
                 {
                     continue;
                 }
-                if pushed >= r_node {
+                if pushed >= r_node || self.peer_pull_only(q) {
                     self.announce(q, g2, Bitmap::singleton(i2), env, catalog);
                     continue;
                 }

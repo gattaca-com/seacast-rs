@@ -484,6 +484,11 @@ pub struct NodeConfig {
     /// as it is published, sampled when there are more. Heartbeat gossip and
     /// rebuilt chunks are not bounded by it. Not in the specification.
     pub offer_peers: usize,
+    /// The node pushes nothing, at publish, forward or rebuild, whatever its
+    /// types' `eager`: every chunk is offered. It is for the host to tell its
+    /// peers, so that they push nothing to it. Not in the specification.
+    #[cfg(feature = "pull-only")]
+    pub pull_only: bool,
     /// When a source offers its chunks (`SOURCE_OFFERS`).
     pub source_offers: SourceOffers,
     /// Card 16: Furthest-behind-first target selection with proof guard.
@@ -653,6 +658,8 @@ impl Default for NodeConfig {
             slow_offer_pct: 50,
             slow_ask_pct: 50,
             offer_peers: usize::MAX,
+            #[cfg(feature = "pull-only")]
+            pull_only: false,
             source_offers: SourceOffers::Ack,
             card16_enabled: true,
             card17_enabled: true,

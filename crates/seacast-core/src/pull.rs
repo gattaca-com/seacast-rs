@@ -643,6 +643,28 @@ impl<B: ChunkBuffer> SeacastNode<B> {
         }
     }
 
+    /// The host tells that `peer` said it takes no chunk it has not asked for,
+    /// or takes them again. Kept until the connection closes. Such a peer is
+    /// pushed nothing, and is offered what it would have been pushed.
+    #[cfg(feature = "pull-only")]
+    pub fn set_peer_pull_only(&mut self, peer: PeerId, pull_only: bool) {
+        if let Some(slot) = self.slots.get_mut(peer) {
+            slot.pull_only = pull_only;
+        }
+    }
+
+    #[cfg(feature = "pull-only")]
+    #[inline]
+    pub(crate) fn peer_pull_only(&self, peer: PeerId) -> bool {
+        self.slots.get(peer).is_some_and(|slot| slot.pull_only)
+    }
+
+    #[cfg(not(feature = "pull-only"))]
+    #[inline]
+    pub(crate) fn peer_pull_only(&self, _peer: PeerId) -> bool {
+        false
+    }
+
     /// Whether `peer` is on a link the host called slow, where the node
     /// follows that.
     pub(crate) fn link_slow(&self, peer: PeerId) -> bool {

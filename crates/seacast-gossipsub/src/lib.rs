@@ -33,6 +33,8 @@ pub use control::{
     HOLDING_FIXED, MAX_HAVE_STRING, OFFER_FIXED, WANT_BYTES, holding_string, is_seacast,
     offer_string, read_holding, read_offer, read_want, want_string, want_strings,
 };
+#[cfg(feature = "pull-only")]
+pub use control::{MODE_BYTES, mode_string, read_mode};
 pub use frame::{Inbound, RpcOut, write_entry};
 pub use payload::{
     CHUNK_FIXED, CONTEXT_BYTES, Chunk, Layout, MAX_ATTACHMENT, MAX_CHUNK_BYTES, MESSAGE_ID_BYTES,

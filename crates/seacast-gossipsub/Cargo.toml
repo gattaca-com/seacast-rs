@@ -8,3 +8,8 @@ description = "The gossipsub binding of SEACAST: control strings, the payload's 
 [dependencies]
 seacast-core = { path = "../seacast-core" }
 seacast-codec = { path = "../seacast-codec" }
+
+[features]
+# The mode entry that carries a node's pull-only word (`mode_string`,
+# `read_mode`). Not in the specification.
+pull-only = ["seacast-core/pull-only"]

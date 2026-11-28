@@ -120,6 +120,13 @@ Added 2026-11-26, after Silver's lab on rate-limited links. The origin of a body
 - **Open: every link starts as not slow.** The first burst to a new peer is pushed wide.
 - **`[c16]`'s random draw at forward stays within one class of link.** It drew among the proven up to the median of what they know, across the boundary between links not slow and slow ones, so a slow peer could take a push while enough fast ones were left out. It now draws among the fast ones when they fill the budget, and among the slow ones for the rest otherwise (`choose_push`). With `link_adaptive` off every link is in one class, as before.
 
+## Pull-only nodes and peers
+
+- **`NodeConfig::pull_only` and `set_peer_pull_only`.** A pull-only node takes the path of a type that is not `EAGER` everywhere (`SeacastNode::eager`): forward pushes nothing, publish offers every chunk, rebuilt chunks are offered. A peer marked pull only is left out of `choose_push`'s candidates, so it is among those offered, and `push_rebuilt` offers to it what it would push. The mark is a field of `Peer`, cleared with the connection.
+- **Behind the `pull-only` cargo feature** of both crates, off by default. Without it `peer_pull_only` is a constant `false` and `eager` reads the type's parameter alone, so the chunk path is as before.
+- **The binding's mode entry** (`mode_string`, `read_mode`): `"MODE" 0x01 flags(1)`, bit 0 pull only. It is the host's to send, on each chunk topic a peer joins, and to read; the node holds no message for it.
+- **Open:** a pull-only node can ask for a group only once its host lets it (`authenticable`): a host that admits a group by its first chunk must let a pull-only node ask before one comes. The mode is per node, not per type.
+
 ## Offers bounded in number
 
 - **`offer_peers` bounds the peers offered a chunk at forward and a group at publish.** The candidates are gathered in `shuffle_scratch` and sampled with the node's rng only when there are more than the bound, so with the default (no bound) no random number is drawn and the simulator's summary is unchanged. `offer_from_source` takes the rng for it.
